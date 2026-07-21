@@ -2,9 +2,9 @@
   "name": "llm-for-zotero",
   "type": "module",
   "version": "3.8.28",
-  "description": "AI research agent rooted in your Zotero library",
+  "description": "An unofficial UI-focused fork of LLM-for-Zotero with a redesigned chat interface",
   "config": {
-    "addonName": "llm-for-zotero",
+    "addonName": "LLM-for-Zotero — UI Edition",
     "addonID": "zotero-llm@github.com.yilewang",
     "addonRef": "llmforzotero",
     "addonInstance": "LLMForZotero",
@@ -12,13 +12,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yilewang/llm-for-zotero.git"
+    "url": "git+https://github.com/TCXM/llm-for-zotero.git"
   },
-  "author": "Yile Wang",
+  "author": "Yile Wang; UI Edition maintained by Yuxiao Zhu",
   "bugs": {
-    "url": "https://github.com/yilewang/llm-for-zotero/issues"
+    "url": "https://github.com/TCXM/llm-for-zotero/issues"
   },
-  "homepage": "https://github.com/yilewang/llm-for-zotero#readme",
+  "homepage": "https://github.com/TCXM/llm-for-zotero#readme",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "zotero-plugin serve",

@@ -9,11 +9,12 @@ export default defineConfig({
   name: pkg.config.addonName,
   id: pkg.config.addonID,
   namespace: pkg.config.addonRef,
+  xpiName: "llm-for-zotero-ui",
   updateURL: `https://github.com/{{owner}}/{{repo}}/releases/download/release/${
     pkg.version.includes("-") ? "update-beta.json" : "update.json"
   }`,
   xpiDownloadLink:
-    "https://github.com/{{owner}}/{{repo}}/releases/download/v{{version}}/{{xpiName}}.xpi",
+    "https://github.com/{{owner}}/{{repo}}/releases/download/ui-v{{version}}/{{xpiName}}.xpi",
 
   build: {
     assets: ["addon/**/*.*"],
@@ -55,6 +56,13 @@ export default defineConfig({
         }
       : {}),
     waitForPlugin: `() => Zotero.${pkg.config.addonInstance}.data.initialized`,
+  },
+
+  release: {
+    bumpp: {
+      tag: "ui-v%s",
+      commit: "chore(release): publish UI Edition v%s",
+    },
   },
 
   // If you need to see a more detailed log, uncomment the following line:

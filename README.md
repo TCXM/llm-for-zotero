@@ -1,13 +1,18 @@
-# llm-for-zotero: A Research Agent System for your Zotero Library
+# LLM-for-Zotero — UI Edition
+
+> An unofficial UI-focused fork of
+> [LLM-for-Zotero](https://github.com/yilewang/llm-for-zotero), featuring a
+> redesigned chat interface and interaction experience. The original project
+> is by Yile Wang; UI Edition is maintained by Yuxiao Zhu.
 
 [![zotero target version](https://img.shields.io/badge/Zotero-7-green?style=flat-square&logo=zotero&logoColor=CC2936)](https://www.zotero.org)
 [![zotero target version](https://img.shields.io/badge/Zotero-8-green?style=flat-square&logo=zotero&logoColor=CC2936)](https://www.zotero.org)
 [![zotero target version](https://img.shields.io/badge/Zotero-9-green?style=flat-square&logo=zotero&logoColor=CC2936)](https://www.zotero.org)
 [![Using Zotero Plugin Template](https://img.shields.io/badge/Using-Zotero%20Plugin%20Template-blue?style=flat-square&logo=github)](https://github.com/windingwind/zotero-plugin-template)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg?style=flat-square)](https://www.gnu.org/licenses/agpl-3.0)
-[![Latest release](https://img.shields.io/github/v/release/yilewang/llm-for-zotero?style=flat-square)](https://github.com/yilewang/llm-for-zotero/releases)
+[![Latest UI Edition release](https://img.shields.io/github/v/release/TCXM/llm-for-zotero?style=flat-square&label=UI%20Edition)](https://github.com/TCXM/llm-for-zotero/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/yilewang/llm-for-zotero?style=flat-square)](https://github.com/yilewang/llm-for-zotero/stargazers)
-[![GitHub Downloads](https://img.shields.io/github/downloads/yilewang/llm-for-zotero/total?style=flat-square)](https://github.com/yilewang/llm-for-zotero/releases)
+[![UI Edition downloads](https://img.shields.io/github/downloads/TCXM/llm-for-zotero/total?style=flat-square)](https://github.com/TCXM/llm-for-zotero/releases)
 [![buymeacoffee](https://img.shields.io/badge/Support-Buy%20Me%20A%20Coffee-FF813F?style=flat-square&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/yat.lok)
 
 <p align="center">
@@ -101,7 +106,7 @@ Server, Claude Code, and file upload workflows.
 ## Quick Start
 
 1. Download the latest `.xpi` file from the
-   [Releases page](https://github.com/yilewang/llm-for-zotero/releases).
+   [UI Edition Releases page](https://github.com/TCXM/llm-for-zotero/releases).
 2. In Zotero, open `Tools` -> `Add-ons` -> gear icon ->
    **Install Add-on From File**, then select the `.xpi`.
 3. Restart Zotero.
@@ -748,14 +753,14 @@ and cloud MinerU involve their respective services or companion runtimes.
 
 > **Q: How do I report a bug or ask a question?**
 >
-> Please [open an issue](https://github.com/yilewang/llm-for-zotero/issues) on
+> Please [open an issue](https://github.com/TCXM/llm-for-zotero/issues) on
 > GitHub.
 
 ## Contributing
 
 Contributions are welcome. Bug reports, feature requests, documentation
 improvements, and pull requests are all useful. Please
-[open an issue](https://github.com/yilewang/llm-for-zotero/issues) or submit a
+[open an issue](https://github.com/TCXM/llm-for-zotero/issues) or submit a
 PR.
 
 ## Star History
