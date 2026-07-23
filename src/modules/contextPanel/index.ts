@@ -773,14 +773,30 @@ function getReaderSelectionTrackingHandler(): ReaderTextSelectionPopupHandler {
         const HTMLElementCtor = event.doc.defaultView?.HTMLElement;
         if (hideRow) {
           row.style.display = "none";
+          row.dataset.llmPopupSentinel = "true";
+          const customSections = row.parentElement as HTMLElement | null;
+          event.doc.defaultView?.setTimeout(() => {
+            if (!customSections?.isConnected) return;
+            const hasVisibleSection = Array.from(customSections.children).some(
+              (child) =>
+                child !== row &&
+                (child as HTMLElement).style.display !== "none",
+            );
+            if (!hasVisibleSection) {
+              customSections.style.display = "none";
+            }
+          }, 0);
         } else {
           row.style.width = "100%";
-          row.style.padding = "0 12px";
+          row.style.padding = "0";
           row.style.margin = "0";
           row.style.borderTop = "none";
           row.style.borderBottom = "none";
           row.style.boxShadow = "none";
           row.style.background = "transparent";
+          const customSections = row.parentElement as HTMLElement | null;
+          customSections?.style.removeProperty("display");
+          customSections?.style.setProperty("padding-top", "0");
         }
         const isSeparator = (el: Element | null): el is HTMLElement => {
           if (!el || !HTMLElementCtor || !(el instanceof HTMLElementCtor))
@@ -805,8 +821,9 @@ function getReaderSelectionTrackingHandler(): ReaderTextSelectionPopupHandler {
           addTextBtn.style.cssText = [
             "display:block",
             "width:100%",
+            "height:22px",
             "margin:0",
-            "padding:6px 8px",
+            "padding:0",
             "box-sizing:border-box",
             "border:1px solid rgba(130,130,130,0.38)",
             "border-radius:6px",
