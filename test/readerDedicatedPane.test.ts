@@ -90,15 +90,30 @@ describe("reader dedicated AI pane", function () {
     );
   });
 
-  it("records the reader tab that owns the dedicated chat pane", function () {
+  it("keeps an independent dedicated chat host for each reader tab", function () {
     const paneSource = readSource(
       "../src/modules/contextPanel/readerDedicatedPane.ts",
     );
 
-    assert.include(
+    assert.include(paneSource, "tabHosts: Map<string, HTMLElement>");
+    assert.include(paneSource, "getOrCreateReaderTabHost(state, ownerTabID)");
+    assert.include(paneSource, "tabHost.dataset.llmReaderTabId = tabID");
+    assert.include(paneSource, "syncReaderTabHostVisibility");
+    assert.notInclude(
       paneSource,
       "state.host.dataset.llmReaderTabId = sourceTabID || selectedTabID",
     );
+  });
+
+  it("tracks async render generations per panel instead of across PDF tabs", function () {
+    const source = readSource("../src/modules/contextPanel/index.ts");
+
+    assert.include(
+      source,
+      "const renderGenerationByBody = new WeakMap<Element, number>()",
+    );
+    assert.include(source, "renderGenerationByBody.set(body, thisGeneration)");
+    assert.notInclude(source, "let renderGeneration = 0");
   });
 
   it("uses window-responsive sizing without Reader resize handles", function () {

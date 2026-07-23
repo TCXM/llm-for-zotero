@@ -7,6 +7,7 @@ type ZoteroDeckElement = Element & {
 
 const READER_DEDICATED_PANE_ID = "llmforzotero-reader-ai-pane";
 const READER_DEDICATED_TAB_ATTRIBUTE = "data-llm-reader-tab-id";
+const READER_DEDICATED_ACTIVE_ATTRIBUTE = "data-llm-reader-tab-active";
 
 export type ReaderPopupPanelTarget = {
   body: Element;
@@ -101,11 +102,30 @@ function getDedicatedPanelTarget(
   if (!host) return null;
 
   const normalizedTabID = normalizeReaderTabID(tabID);
-  const ownerTabID = normalizeReaderTabID(
+  const tabHosts = Array.from(host.children).filter(
+    (child): child is Element =>
+      child.nodeType === 1 &&
+      Boolean(child.getAttribute(READER_DEDICATED_TAB_ATTRIBUTE)),
+  );
+  const matchingHost = normalizedTabID
+    ? tabHosts.find(
+        (candidate) =>
+          normalizeReaderTabID(
+            candidate.getAttribute(READER_DEDICATED_TAB_ATTRIBUTE),
+          ) === normalizedTabID,
+      )
+    : tabHosts.find(
+        (candidate) =>
+          candidate.getAttribute(READER_DEDICATED_ACTIVE_ATTRIBUTE) !== null,
+      );
+  if (matchingHost) return getRootTarget(matchingHost);
+
+  // Compatibility with a panel created by an older hot-reloaded build.
+  const legacyOwnerTabID = normalizeReaderTabID(
     host.getAttribute(READER_DEDICATED_TAB_ATTRIBUTE),
   );
-  if (normalizedTabID && ownerTabID !== normalizedTabID) return null;
-  return getRootTarget(host);
+  if (normalizedTabID && legacyOwnerTabID !== normalizedTabID) return null;
+  return legacyOwnerTabID || !normalizedTabID ? getRootTarget(host) : null;
 }
 
 function getPanelTarget(

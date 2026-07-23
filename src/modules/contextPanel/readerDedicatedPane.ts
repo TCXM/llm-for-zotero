@@ -3,6 +3,7 @@ const READER_ITEM_DECK_ID = "zotero-context-pane-item-deck";
 const READER_SIDENAV_ID = "zotero-context-pane-sidenav";
 const READER_AI_DECK_PANEL_ID = "llmforzotero-reader-ai-deck-panel";
 const READER_AI_PANE_ID = "llmforzotero-reader-ai-pane";
+const READER_AI_TAB_PANE_CLASS = "llm-reader-ai-tab-pane";
 const LIBRARY_ITEM_DECK_ID = "zotero-item-pane-content";
 const LIBRARY_ITEM_DETAILS_ID = "zotero-item-details";
 const LIBRARY_SIDENAV_ID = "zotero-view-item-sidenav";
@@ -16,6 +17,7 @@ type DedicatedPaneState = {
   deckPanel: Element;
   itemDeck: Element;
   host: HTMLElement;
+  tabHosts: Map<string, HTMLElement>;
   sidenav: Element;
   activeRequested: boolean;
   onSidenavClick: (event: Event) => void;
@@ -153,6 +155,60 @@ function syncReaderDedicatedPaneLayout(host: HTMLElement): void {
   }
 }
 
+function getSelectedReaderTabID(win: Window): string {
+  const selectedID = (
+    win as Window & {
+      Zotero_Tabs?: { selectedID?: unknown };
+      Zotero?: { Tabs?: { selectedID?: unknown } };
+    }
+  ).Zotero_Tabs?.selectedID;
+  const fallbackSelectedID = (
+    win as Window & { Zotero?: { Tabs?: { selectedID?: unknown } } }
+  ).Zotero?.Tabs?.selectedID;
+  return String(selectedID ?? fallbackSelectedID ?? "").trim();
+}
+
+function createReaderTabHost(
+  state: DedicatedPaneState,
+  tabID: string,
+): HTMLElement {
+  const doc = state.host.ownerDocument;
+  const tabHost = doc.createElementNS(
+    "http://www.w3.org/1999/xhtml",
+    "div",
+  ) as HTMLElement;
+  tabHost.className = [
+    READER_AI_TAB_PANE_CLASS,
+    "llm-dedicated-ai-pane",
+    "llm-modern-chat-pane",
+  ].join(" ");
+  tabHost.dataset.llmReaderTabId = tabID;
+  state.host.appendChild(tabHost);
+  state.tabHosts.set(tabID, tabHost);
+  syncReaderDedicatedPaneLayout(tabHost);
+  return tabHost;
+}
+
+function getOrCreateReaderTabHost(
+  state: DedicatedPaneState,
+  tabID: string,
+): HTMLElement {
+  return state.tabHosts.get(tabID) || createReaderTabHost(state, tabID);
+}
+
+function syncReaderTabHostVisibility(
+  state: DedicatedPaneState,
+  selectedTabID: string,
+): void {
+  if (state.scope !== "reader") return;
+  state.host.dataset.llmReaderActiveTabId = selectedTabID;
+  for (const [tabID, tabHost] of state.tabHosts) {
+    const active = Boolean(selectedTabID) && tabID === selectedTabID;
+    tabHost.hidden = !active;
+    tabHost.toggleAttribute("data-llm-reader-tab-active", active);
+  }
+}
+
 function createReaderDedicatedPaneState(
   win: Window,
   paneID: string,
@@ -197,6 +253,7 @@ function createReaderDedicatedPaneState(
     deckPanel,
     itemDeck,
     host,
+    tabHosts: new Map<string, HTMLElement>(),
     sidenav,
     activeRequested: false,
     onSidenavClick: (_event: Event) => undefined,
@@ -204,11 +261,19 @@ function createReaderDedicatedPaneState(
     selectionObserver: null as unknown as MutationObserver,
   } satisfies DedicatedPaneState;
 
-  syncReaderDedicatedPaneLayout(host);
+  if (config.scope === "library") {
+    syncReaderDedicatedPaneLayout(host);
+  }
   state.layoutObserver = new win.MutationObserver(() => {
+    if (state.scope === "reader") {
+      for (const tabHost of state.tabHosts.values()) {
+        syncReaderDedicatedPaneLayout(tabHost);
+      }
+      return;
+    }
     syncReaderDedicatedPaneLayout(host);
   });
-  state.layoutObserver.observe(host, { childList: true });
+  state.layoutObserver.observe(host, { childList: true, subtree: true });
 
   state.onSidenavClick = (event: Event) => {
     const mouseEvent = event as MouseEvent;
@@ -248,6 +313,7 @@ function createReaderDedicatedPaneState(
 export function registerReaderDedicatedPane(win: Window, paneID: string): void {
   const existing = readerDedicatedPaneStates.get(win);
   if (existing?.paneID === paneID) {
+    syncReaderTabHostVisibility(existing, getSelectedReaderTabID(win));
     if (existing.activeRequested) activateReaderDedicatedPane(existing);
     else syncReaderDedicatedPaneSelection(existing);
     return;
@@ -260,10 +326,12 @@ export function registerReaderDedicatedPane(win: Window, paneID: string): void {
     sidenavID: READER_SIDENAV_ID,
     deckPanelID: READER_AI_DECK_PANEL_ID,
     hostID: READER_AI_PANE_ID,
-    hostClassName:
-      "llm-reader-ai-pane llm-dedicated-ai-pane llm-modern-chat-pane",
+    hostClassName: "llm-reader-ai-pane",
   });
-  if (state) readerDedicatedPaneStates.set(win, state);
+  if (state) {
+    readerDedicatedPaneStates.set(win, state);
+    syncReaderTabHostVisibility(state, getSelectedReaderTabID(win));
+  }
 }
 
 function registerLibraryDedicatedPane(win: Window, paneID: string): void {
@@ -322,6 +390,16 @@ function getSourceReaderTabID(body: Element): string {
   );
 }
 
+export function syncReaderDedicatedPaneForTab(
+  win: Window,
+  tabID?: string | number | null,
+): void {
+  const state = readerDedicatedPaneStates.get(win);
+  if (!state) return;
+  const selectedTabID = String(tabID ?? getSelectedReaderTabID(win)).trim();
+  syncReaderTabHostVisibility(state, selectedTabID);
+}
+
 export function resolveReaderDedicatedPanelBody(params: {
   sectionBody: Element;
   tabType?: string | null;
@@ -347,15 +425,13 @@ export function resolveReaderDedicatedPanelBody(params: {
   if (!state) return sectionBody;
 
   const sourceTabID = getSourceReaderTabID(sectionBody);
-  const selectedTabID = String(
-    (win as Window & { Zotero_Tabs?: { selectedID?: unknown } }).Zotero_Tabs
-      ?.selectedID || "",
-  );
-  if (sourceTabID && selectedTabID && sourceTabID !== selectedTabID) {
-    return null;
-  }
-  state.host.dataset.llmReaderTabId = sourceTabID || selectedTabID;
-  return state.host;
+  const selectedTabID = getSelectedReaderTabID(win);
+  const ownerTabID = sourceTabID || selectedTabID;
+  if (!ownerTabID) return null;
+
+  const tabHost = getOrCreateReaderTabHost(state, ownerTabID);
+  syncReaderTabHostVisibility(state, selectedTabID || ownerTabID);
+  return tabHost;
 }
 
 export function activateReaderDedicatedPaneForDocument(doc: Document): boolean {
@@ -363,6 +439,7 @@ export function activateReaderDedicatedPaneForDocument(doc: Document): boolean {
   if (!win) return false;
   const state = readerDedicatedPaneStates.get(win);
   if (!state) return false;
+  syncReaderTabHostVisibility(state, getSelectedReaderTabID(win));
   activateReaderDedicatedPane(state);
   return true;
 }

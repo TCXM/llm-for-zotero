@@ -115,6 +115,7 @@ import {
 import {
   registerReaderDedicatedPane,
   resolveReaderDedicatedPanelBody,
+  syncReaderDedicatedPaneForTab,
   unregisterAllReaderDedicatedPanes,
   unregisterLibraryDedicatedPane,
   unregisterReaderDedicatedPane,
@@ -258,9 +259,9 @@ function isPanelConversationLoaded(
 export function registerReaderContextPanel() {
   if (readerContextPanelRegistered) return;
   setReaderContextPanelRegistered(true);
-  // Generation counter: incremented on every onAsyncRender call so stale
-  // (superseded) renders can bail out at each await point.
-  let renderGeneration = 0;
+  // Each panel owns its render generation so one PDF tab cannot invalidate
+  // another tab's asynchronous render while the user switches readers.
+  const renderGenerationByBody = new WeakMap<Element, number>();
   let lastItemChangeSignature = "";
   const setupEmbeddedPanelHandlers = (
     body: Element,
@@ -288,6 +289,11 @@ export function registerReaderContextPanel() {
     onItemChange: ({ setEnabled, tabType, item }) => {
       setEnabled(true);
       const selectedTabId = refreshLastKnownSelectedTabId();
+      if (tabType === "reader") {
+        for (const win of Zotero.getMainWindows?.() || []) {
+          syncReaderDedicatedPaneForTab(win);
+        }
+      }
       const itemChangeSignature = [
         tabType || "",
         selectedTabId ?? "",
@@ -500,7 +506,8 @@ export function registerReaderContextPanel() {
         return;
       }
 
-      const thisGeneration = ++renderGeneration;
+      const thisGeneration = (renderGenerationByBody.get(body) || 0) + 1;
+      renderGenerationByBody.set(body, thisGeneration);
 
       // If onRender already did the synchronous buildUI + setupHandlers for
       // this render cycle, skip the duplicate work.  We still run the
@@ -530,14 +537,14 @@ export function registerReaderContextPanel() {
       }
       // Bail if a newer render has started while we were awaiting,
       // or if the standalone window was opened during the await.
-      if (renderGeneration !== thisGeneration) return;
+      if (renderGenerationByBody.get(body) !== thisGeneration) return;
       if (isStandaloneWindowActive()) return;
       await renderShortcuts(
         body,
         resolvedItem,
         resolveShortcutMode(resolvedItem),
       );
-      if (renderGeneration !== thisGeneration) return;
+      if (renderGenerationByBody.get(body) !== thisGeneration) return;
       if (isStandaloneWindowActive()) return;
       if (!syncAlreadyRendered && !contextRefreshOnly) {
         setupEmbeddedPanelHandlers(body, item);

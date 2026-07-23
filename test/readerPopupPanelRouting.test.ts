@@ -106,20 +106,32 @@ function buildStandalonePanel() {
   };
 }
 
-function buildDedicatedReaderPanel(ownerTabID = "tab-active") {
+function buildDedicatedReaderPanel(
+  ownerTabIDs = ["tab-active"],
+  activeTabID = ownerTabIDs[0] || "",
+) {
   const deck = new FakeElement();
   const host = new FakeElement();
   const doc = new FakeDocument(deck, host);
   deck.ownerDocument = doc;
   host.ownerDocument = doc;
-  host.setAttribute("data-llm-reader-tab-id", ownerTabID);
-  const root = new FakeElement();
-  root.setAttribute("id", "llm-main");
-  host.append(root);
+  const tabHosts = new Map<string, { host: FakeElement; root: FakeElement }>();
+  for (const ownerTabID of ownerTabIDs) {
+    const tabHost = new FakeElement();
+    tabHost.setAttribute("data-llm-reader-tab-id", ownerTabID);
+    if (ownerTabID === activeTabID) {
+      tabHost.setAttribute("data-llm-reader-tab-active", "");
+    }
+    const root = new FakeElement();
+    root.setAttribute("id", "llm-main");
+    tabHost.append(root);
+    host.append(tabHost);
+    tabHosts.set(ownerTabID, { host: tabHost, root });
+  }
   return {
     doc: doc as unknown as Document,
-    host: host as unknown as Element,
-    root: root as unknown as Element,
+    outerHost: host as unknown as Element,
+    tabHosts,
   };
 }
 
@@ -174,7 +186,8 @@ describe("reader popup panel routing", function () {
   });
 
   it("routes a reader popup to the matching dedicated chat pane", function () {
-    const { doc, host, root } = buildDedicatedReaderPanel();
+    const { doc, tabHosts } = buildDedicatedReaderPanel();
+    const active = tabHosts.get("tab-active")!;
 
     const target = resolveReaderPopupPanelTarget({
       preferredDocument: doc,
@@ -182,12 +195,12 @@ describe("reader popup panel routing", function () {
       tabID: "tab-active",
     });
 
-    assert.strictEqual(target?.body, host);
-    assert.strictEqual(target?.root, root);
+    assert.strictEqual(target?.body, active.host);
+    assert.strictEqual(target?.root, active.root);
   });
 
   it("does not route a reader popup to another tab's dedicated chat", function () {
-    const { doc } = buildDedicatedReaderPanel("tab-other");
+    const { doc } = buildDedicatedReaderPanel(["tab-other"]);
 
     assert.isNull(
       resolveReaderPopupPanelTarget({
@@ -196,6 +209,43 @@ describe("reader popup panel routing", function () {
         tabID: "tab-active",
       }),
     );
+  });
+
+  it("keeps separate dedicated chat targets for two PDF tabs", function () {
+    const { doc, tabHosts } = buildDedicatedReaderPanel(
+      ["tab-first", "tab-second"],
+      "tab-second",
+    );
+
+    const first = resolveReaderPopupPanelTarget({
+      preferredDocument: doc,
+      documents: [doc],
+      tabID: "tab-first",
+    });
+    const second = resolveReaderPopupPanelTarget({
+      preferredDocument: doc,
+      documents: [doc],
+      tabID: "tab-second",
+    });
+
+    assert.strictEqual(first?.root, tabHosts.get("tab-first")?.root);
+    assert.strictEqual(second?.root, tabHosts.get("tab-second")?.root);
+    assert.notStrictEqual(first?.root, second?.root);
+  });
+
+  it("uses the active dedicated PDF host when the popup has no tab ID", function () {
+    const { doc, tabHosts } = buildDedicatedReaderPanel(
+      ["tab-first", "tab-second"],
+      "tab-second",
+    );
+
+    const target = resolveReaderPopupPanelTarget({
+      preferredDocument: doc,
+      documents: [doc],
+      tabID: null,
+    });
+
+    assert.strictEqual(target?.root, tabHosts.get("tab-second")?.root);
   });
 
   it("uses only the preferred window's selected panel without a tab ID", function () {
