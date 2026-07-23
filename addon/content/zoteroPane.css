@@ -130,8 +130,8 @@ item-pane-section.llm-reader-ai-source-section {
 
 .llm-modern-chat-pane .llm-history-new::before,
 .llm-modern-chat-pane .llm-history-toggle::before {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
 }
 
 .llm-modern-chat-pane .llm-mode-switch {
@@ -149,19 +149,54 @@ item-pane-section.llm-reader-ai-source-section {
   color: var(--fill-secondary);
 }
 
-.llm-modern-chat-pane .llm-claude-system-toggle {
+.llm-modern-chat-pane .llm-runtime-system-controls {
+  gap: 3px;
+  width: 28px;
+  min-width: 28px;
+}
+
+.llm-modern-chat-pane .llm-runtime-system-controls[data-visible-count="2"] {
+  width: 59px;
+  min-width: 59px;
+}
+
+.llm-modern-chat-pane .llm-runtime-system-toggle {
   width: 28px;
   min-width: 28px;
   height: 28px;
+  min-height: 28px;
+  flex-basis: 28px;
   border-radius: 5px;
 }
 
+.llm-modern-chat-pane .llm-runtime-system-toggle-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.llm-modern-chat-pane .llm-runtime-system-toggle-icon--claude-code,
+.llm-modern-chat-pane .llm-runtime-system-toggle-icon--codex::before {
+  opacity: 1;
+}
+
 .llm-modern-chat-pane .llm-header-actions {
-  gap: 4px;
+  gap: 9px;
 }
 
 .llm-modern-chat-pane .llm-header-actions > button {
   color: var(--fill-secondary);
+}
+
+.llm-modern-chat-pane .llm-header-actions .llm-btn-icon {
+  opacity: 1;
+}
+
+.llm-modern-chat-pane .llm-popout-btn::before,
+.llm-modern-chat-pane .llm-settings-btn::before,
+.llm-modern-chat-pane .llm-export-btn::before,
+.llm-modern-chat-pane .llm-clear-btn::before {
+  width: 20px;
+  height: 20px;
 }
 
 .llm-modern-chat-pane .llm-messages {
@@ -1673,7 +1708,7 @@ item-pane-section.llm-reader-ai-source-section {
 }
 
 @container (max-width: 380px) {
-  .llm-header-actions {
+  .llm-modern-chat-pane .llm-header-actions {
     gap: 0;
   }
 

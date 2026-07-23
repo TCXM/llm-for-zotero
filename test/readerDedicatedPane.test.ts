@@ -46,6 +46,7 @@ describe("reader dedicated AI pane", function () {
 
     assert.include(source, "content/icons/sidebar-ai.svg");
     assert.notInclude(source, "content/icons/sidebar-ai-dark.svg");
+    assert.include(lightIcon, 'width="20" height="20"');
     assert.include(lightIcon, 'viewBox="0 0 16 16"');
     assert.include(lightIcon, 'fill="context-fill"');
     assert.include(attribution, "microsoft/vscode-codicons");
@@ -149,6 +150,34 @@ describe("reader dedicated AI pane", function () {
     assert.include(styles, "background: var(--fill-quinary);");
     assert.include(styles, "background: var(--fill-quarternary);");
     assert.include(styles, "border: var(--material-border-quinary);");
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-runtime-system-toggle \{[\s\S]*?width: 28px;[\s\S]*?height: 28px;[\s\S]*?flex-basis: 28px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-runtime-system-toggle-icon \{[\s\S]*?width: 20px;[\s\S]*?height: 20px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-runtime-system-controls \{[\s\S]*?gap: 3px;[\s\S]*?width: 28px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-header-actions \{[\s\S]*?gap: 9px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-history-new::before,[\s\S]*?\.llm-modern-chat-pane \.llm-history-toggle::before \{[\s\S]*?width: 20px;[\s\S]*?height: 20px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-header-actions \.llm-btn-icon \{[\s\S]*?opacity: 1;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-runtime-system-toggle-icon--claude-code,[\s\S]*?\.llm-modern-chat-pane \.llm-runtime-system-toggle-icon--codex::before \{[\s\S]*?opacity: 1;/,
+    );
   });
 
   it("uses a darker reading surface and native composer controls", function () {
