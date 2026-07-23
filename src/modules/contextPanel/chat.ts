@@ -4736,6 +4736,7 @@ type CodexNativeTraceItemEvent = {
   id?: string;
   type?: string;
   role?: string;
+  phase?: "commentary" | "final_answer";
   status?: string;
   summary?: string;
   details?: string;
@@ -4766,6 +4767,7 @@ type CodexNativeTraceItemEvent = {
 type CodexNativeTraceDeltaEvent = {
   itemId?: string;
   delta: string;
+  phase?: "commentary" | "final_answer";
 };
 
 type CodexNativeMcpToolActivityEvent = {
@@ -4910,10 +4912,6 @@ function compactCodexNativeTraceLine(
   return `${clean.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
-function normalizeCodexNativeTraceCompare(text: string): string {
-  return sanitizeText(text).replace(/\s+/g, " ").trim();
-}
-
 function normalizeCodexNativeItemTypeKey(type: string | undefined): string {
   return sanitizeText(type || "")
     .replace(/[-_\s]+/g, "")
@@ -5002,10 +5000,8 @@ function createCodexNativeActivityTraceController(
   const mcpRequestToolItemIds = new Map<string, string>();
   const activatedSkillIds = new Set<string>();
   const progressCoalescers = new Map<string, BlockStreamCoalescer>();
-  const agentMessageItemIds = new Set<string>();
+  let finalAnswerStartedAt: number | undefined;
   let seq = 0;
-  let lastAgentMessageItemId = "";
-  let agentAnswerStartedAt: number | undefined;
 
   const createEvent = (payload: AgentEvent): AgentRunEventRecord => ({
     runId,
@@ -5014,18 +5010,6 @@ function createCodexNativeActivityTraceController(
     payload,
     createdAt: Date.now(),
   });
-
-  const rebuildProgressIndexes = () => {
-    progressEventIndexes.clear();
-    toolEventIndexes.clear();
-    events.forEach((entry, index) => {
-      if (entry.payload.type === "codex_progress") {
-        progressEventIndexes.set(entry.payload.itemId, index);
-      } else if (entry.payload.type === "codex_tool_activity") {
-        toolEventIndexes.set(entry.payload.itemId, index);
-      }
-    });
-  };
 
   const sync = () => {
     assistantMessage.pendingAgentTraceEvents = events.length
@@ -5038,19 +5022,11 @@ function createCodexNativeActivityTraceController(
     queueRefresh();
   };
 
-  const removeEventAt = (index: number) => {
-    if (index < 0 || index >= events.length) return false;
-    events.splice(index, 1);
-    rebuildProgressIndexes();
-    return true;
-  };
-
   const upsertProgressText = (
     itemId: string,
     text: string,
     mode: "replace" | "append",
     status: "running" | "completed",
-    kind?: "assistant_message",
   ): boolean => {
     const cleanItemId = sanitizeText(itemId).trim();
     const cleanText = sanitizeText(text);
@@ -5070,9 +5046,6 @@ function createCodexNativeActivityTraceController(
           itemId: cleanItemId,
           text: nextText,
           status,
-          ...(kind || existing.payload.kind
-            ? { kind: kind || existing.payload.kind }
-            : {}),
         },
       };
       return true;
@@ -5084,7 +5057,6 @@ function createCodexNativeActivityTraceController(
         itemId: cleanItemId,
         text: cleanText,
         status,
-        ...(kind ? { kind } : {}),
       }),
     );
     return true;
@@ -5099,13 +5071,10 @@ function createCodexNativeActivityTraceController(
         block,
         "append",
         "running",
-        agentMessageItemIds.has(itemId) ? "assistant_message" : undefined,
       );
       if (changed) sync();
     };
-    coalescer = agentMessageItemIds.has(itemId)
-      ? createAssistantResponseStreamCoalescer(onBlock)
-      : createBlockStreamCoalescer({ onBlock });
+    coalescer = createAssistantResponseStreamCoalescer(onBlock);
     progressCoalescers.set(itemId, coalescer);
     return coalescer;
   };
@@ -5483,11 +5452,7 @@ function createCodexNativeActivityTraceController(
     event: CodexNativeTraceItemEvent,
     phase: "started" | "completed",
   ): void => {
-    if (isCodexNativeAgentMessageItem(event)) {
-      const itemId = sanitizeText(event.id || "").trim();
-      if (itemId) agentMessageItemIds.add(itemId);
-      return;
-    }
+    if (isCodexNativeAgentMessageItem(event)) return;
     flushAllProgressCoalescers("event");
     if (appendStructuredOperationStatus(event, phase)) {
       sync();
@@ -5537,21 +5502,19 @@ function createCodexNativeActivityTraceController(
   ): boolean => {
     const itemId = sanitizeText(event.itemId || "").trim();
     if (!itemId) return false;
-    agentAnswerStartedAt ||= Date.now();
-    agentMessageItemIds.add(itemId);
-    // Show the first answer token immediately so the activity disclosure
-    // collapses as soon as the final answer begins. Later deltas still use the
-    // smooth response coalescer below.
-    if (!progressEventIndexes.has(itemId)) {
-      const changed = upsertProgressText(
-        itemId,
-        event.delta,
-        "append",
-        "running",
-        "assistant_message",
-      );
-      if (changed) sync();
-      return changed;
+    if (event.phase === "final_answer") {
+      if (!finalAnswerStartedAt) {
+        finalAnswerStartedAt = Date.now();
+        events.push(
+          createEvent({
+            type: "final",
+            text: "",
+            answerStartedAt: finalAnswerStartedAt,
+          }),
+        );
+        sync();
+      }
+      return false;
     }
     getProgressCoalescer(itemId).pushText(event.delta);
     return true;
@@ -5628,22 +5591,13 @@ function createCodexNativeActivityTraceController(
     event: CodexNativeTraceItemEvent,
   ): void => {
     if (!isCodexNativeAgentMessageItem(event)) return;
+    if (event.phase === "final_answer") return;
     const itemId = sanitizeText(event.id || "").trim();
     if (!itemId) return;
-    agentMessageItemIds.add(itemId);
     flushProgressCoalescer(itemId, "event");
-    lastAgentMessageItemId = itemId;
     const completedText = event.details || event.summary || "";
     if (completedText && !progressEventIndexes.has(itemId)) {
-      if (
-        upsertProgressText(
-          itemId,
-          completedText,
-          "replace",
-          "completed",
-          "assistant_message",
-        )
-      ) {
+      if (upsertProgressText(itemId, completedText, "replace", "completed")) {
         sync();
       }
     }
@@ -5651,40 +5605,29 @@ function createCodexNativeActivityTraceController(
 
   const finish = (finalText: string): void => {
     flushAllProgressCoalescers("final");
-    let changed = false;
-    if (lastAgentMessageItemId) {
-      const finalIndex = progressEventIndexes.get(lastAgentMessageItemId);
-      if (finalIndex !== undefined) {
-        changed = removeEventAt(finalIndex) || changed;
-      }
-    }
-    const normalizedFinal = normalizeCodexNativeTraceCompare(finalText);
-    if (normalizedFinal) {
-      for (let index = events.length - 1; index >= 0; index -= 1) {
-        const entry = events[index];
-        if (
-          entry?.payload.type === "codex_progress" &&
-          normalizeCodexNativeTraceCompare(entry.payload.text) ===
-            normalizedFinal
-        ) {
-          changed = removeEventAt(index) || changed;
-        }
-      }
-    }
-    const alreadyFinal = events.some((entry) => entry.payload.type === "final");
-    if (!alreadyFinal) {
-      events.push(
-        createEvent({
+    const finalIndex = events.findIndex(
+      (entry) => entry.payload.type === "final",
+    );
+    if (finalIndex >= 0) {
+      const existing = events[finalIndex];
+      events[finalIndex] = {
+        ...existing,
+        payload: {
           type: "final",
           text: finalText,
-          ...(agentAnswerStartedAt
-            ? { answerStartedAt: agentAnswerStartedAt }
+          ...(existing.payload.type === "final" &&
+          existing.payload.answerStartedAt
+            ? { answerStartedAt: existing.payload.answerStartedAt }
             : {}),
-        }),
-      );
-      changed = true;
+        },
+      };
+      sync();
+    } else {
+      // The terminal marker closes the activity lifecycle. Do not prune any
+      // preceding agent-message or tool events from the interleaved trace.
+      events.push(createEvent({ type: "final", text: finalText }));
+      sync();
     }
-    if (changed) sync();
   };
 
   return {

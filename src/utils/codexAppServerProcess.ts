@@ -49,10 +49,13 @@ type RequestHandler = (
   id: number,
 ) => unknown | Promise<unknown>;
 
+export type CodexAppServerMessagePhase = "commentary" | "final_answer";
+
 export type CodexAppServerItemEvent = {
   id?: string;
   type?: string;
   role?: string;
+  phase?: CodexAppServerMessagePhase;
   status?: string;
   summary?: string;
   details?: string;
@@ -83,6 +86,7 @@ export type CodexAppServerItemEvent = {
 export type CodexAppServerAgentMessageDeltaEvent = {
   itemId?: string;
   delta: string;
+  phase?: CodexAppServerMessagePhase;
 };
 
 export type CodexAppServerInjectItemsSupport =
@@ -874,6 +878,7 @@ function copyCodexAppServerRawMetadata(
     "senderThreadId",
     "agentsStates",
     "contentItems",
+    "phase",
   ];
   const raw: Record<string, unknown> = {};
   for (const key of keys) {
@@ -899,6 +904,7 @@ function extractCodexAppServerItem(
     id?: unknown;
     type?: unknown;
     role?: unknown;
+    phase?: unknown;
     status?: unknown;
     summary?: unknown;
     content?: unknown;
@@ -947,6 +953,10 @@ function extractCodexAppServerItem(
     typeof item.role === "string" && item.role.trim()
       ? item.role.trim().toLowerCase()
       : undefined;
+  const phase =
+    item.phase === "commentary" || item.phase === "final_answer"
+      ? item.phase
+      : undefined;
   const rawSummary = normalizeCodexAppServerText(item.summary) || undefined;
   const rawDetails =
     normalizeCodexAppServerText(item.content) ||
@@ -969,6 +979,7 @@ function extractCodexAppServerItem(
         : undefined,
     type,
     role,
+    phase,
     status: status || undefined,
     summary,
     details,
@@ -1117,6 +1128,10 @@ export function waitForCodexAppServerTurnCompletion(params: {
     let lastEmittedUsageTotals: UsageStats | null = null;
     let lastMessageItemId = "";
     const messageTextByItemId = new Map<string, string>();
+    const messagePhaseByItemId = new Map<
+      string,
+      CodexAppServerMessagePhase
+    >();
     const getResolvedMessageText = () => {
       if (lastMessageItemId) {
         const text = messageTextByItemId.get(lastMessageItemId);
@@ -1337,11 +1352,17 @@ export function waitForCodexAppServerTurnCompletion(params: {
             `${messageTextByItemId.get(itemId) || ""}${delta}`,
           );
           if (onAgentMessageDelta) {
-            Promise.resolve(onAgentMessageDelta({ itemId, delta })).catch(
-              () => {
-                // Ignore downstream consumer errors so the transport can finish cleanly.
-              },
-            );
+            Promise.resolve(
+              onAgentMessageDelta({
+                itemId,
+                delta,
+                ...(messagePhaseByItemId.get(itemId)
+                  ? { phase: messagePhaseByItemId.get(itemId) }
+                  : {}),
+              }),
+            ).catch(() => {
+              // Ignore downstream consumer errors so the transport can finish cleanly.
+            });
             return;
           }
         } else {
@@ -1477,6 +1498,13 @@ export function waitForCodexAppServerTurnCompletion(params: {
         if (eventTurnId && eventTurnId !== turnId) return;
         const item = extractCodexAppServerItem(rawParams);
         if (!item) return;
+        if (
+          isCodexAppServerAgentMessageItem(item) &&
+          item.id &&
+          item.phase
+        ) {
+          messagePhaseByItemId.set(item.id, item.phase);
+        }
         Promise.resolve(onItemStarted?.(item)).catch(() => {
           // Ignore downstream consumer errors so the transport can finish cleanly.
         });
@@ -1490,6 +1518,13 @@ export function waitForCodexAppServerTurnCompletion(params: {
         if (eventTurnId && eventTurnId !== turnId) return;
         const item = extractCodexAppServerItem(rawParams);
         if (!item) return;
+        if (
+          isCodexAppServerAgentMessageItem(item) &&
+          item.id &&
+          item.phase
+        ) {
+          messagePhaseByItemId.set(item.id, item.phase);
+        }
         Promise.resolve(onItemCompleted?.(item)).catch(() => {
           // Ignore downstream consumer errors so the transport can finish cleanly.
         });

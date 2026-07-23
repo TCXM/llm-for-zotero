@@ -1024,8 +1024,30 @@ describe("codexAppServerProcess", function () {
   it("routes item-scoped agent message deltas separately when requested", async function () {
     const proc = createProcess();
     const chunks: string[] = [];
-    const itemDeltas: Array<{ itemId?: string; delta: string }> = [];
+    const itemDeltas: Array<{
+      itemId?: string;
+      delta: string;
+      phase?: "commentary" | "final_answer";
+    }> = [];
 
+    setTimeout(() => {
+      void (
+        proc as unknown as {
+          handleMessage: (msg: Record<string, unknown>) => void;
+        }
+      ).handleMessage({
+        method: "item/started",
+        params: {
+          turnId: "turn-items",
+          item: {
+            id: "msg-progress",
+            type: "agentMessage",
+            text: "",
+            phase: "commentary",
+          },
+        },
+      });
+    }, 2);
     setTimeout(() => {
       void (
         proc as unknown as {
@@ -1040,6 +1062,24 @@ describe("codexAppServerProcess", function () {
         },
       });
     }, 5);
+    setTimeout(() => {
+      void (
+        proc as unknown as {
+          handleMessage: (msg: Record<string, unknown>) => void;
+        }
+      ).handleMessage({
+        method: "item/started",
+        params: {
+          turnId: "turn-items",
+          item: {
+            id: "msg-final",
+            type: "agentMessage",
+            text: "",
+            phase: "final_answer",
+          },
+        },
+      });
+    }, 7);
     setTimeout(() => {
       void (
         proc as unknown as {
@@ -1100,8 +1140,16 @@ describe("codexAppServerProcess", function () {
     assert.equal(result, "Final answer.");
     assert.deepEqual(chunks, []);
     assert.deepEqual(itemDeltas, [
-      { itemId: "msg-progress", delta: "I'm reading." },
-      { itemId: "msg-final", delta: "Final answer." },
+      {
+        itemId: "msg-progress",
+        delta: "I'm reading.",
+        phase: "commentary",
+      },
+      {
+        itemId: "msg-final",
+        delta: "Final answer.",
+        phase: "final_answer",
+      },
     ]);
   });
 
