@@ -28,6 +28,7 @@ import {
 import { createZToolkit } from "./utils/ztoolkit";
 import { clearAllState, initFontScale } from "./modules/contextPanel/state";
 import { clearQueuedFollowUpState } from "./modules/contextPanel/queuedFollowUps";
+import { closeAllAddonDialogs } from "./utils/dialogRegistry";
 
 type ConversationStoreReadiness = {
   chatStoreReady: boolean;
@@ -367,7 +368,7 @@ async function onMainWindowUnload(win: Window): Promise<void> {
   unregisterReaderDedicatedPaneForWindow(win);
   unregisterNoteEditingSelectionTracking(win);
   ztoolkit.unregisterAll();
-  addon.data.dialog?.window?.close();
+  closeAllAddonDialogs();
   addon.data.standaloneWindow?.close();
   win.document.getElementById("llmforzotero-open-standalone")?.remove();
   win.document.getElementById("llmforzotero-key-standalone")?.remove();
@@ -382,7 +383,7 @@ function onShutdown(): void {
   unregisterReaderSelectionTracking();
   unregisterAllReaderDedicatedPaneWindows();
   unregisterAllNoteEditingSelectionTracking();
-  addon.data.dialog?.window?.close();
+  closeAllAddonDialogs();
   addon.data.standaloneWindow?.close();
   try {
     const { unregisterWebChatRelay } = require("./webchat/relayServer");

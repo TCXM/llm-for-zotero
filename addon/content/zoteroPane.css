@@ -2516,8 +2516,8 @@ item-pane-section.llm-reader-ai-source-section {
   color: #d32f2f;
 }
 
-/* Confirmation dialog */
-.llm-standalone-confirm-overlay {
+/* In-plugin modal dialogs */
+.llm-modal-overlay {
   display: flex;
   position: fixed;
   inset: 0;
@@ -2528,7 +2528,15 @@ item-pane-section.llm-reader-ai-source-section {
   background: rgba(0, 0, 0, 0.42);
 }
 
-.llm-standalone-confirm-dialog {
+.llm-modal-dialog {
+  --llm-modal-control-background: var(
+    --material-sidepane,
+    var(--material-background, #ffffff)
+  );
+  --llm-modal-control-border: var(
+    --stroke-primary,
+    var(--fill-secondary, #7a7a7a)
+  );
   width: min(92vw, 380px);
   box-sizing: border-box;
   padding: 16px;
@@ -2539,7 +2547,7 @@ item-pane-section.llm-reader-ai-source-section {
   color: var(--fill-primary);
 }
 
-.llm-standalone-confirm-title {
+.llm-modal-title {
   font-size: var(--llm-fs-14, 14px);
   font-weight: 600;
   line-height: 1.35;
@@ -2552,14 +2560,14 @@ item-pane-section.llm-reader-ai-source-section {
   line-height: 1.45;
 }
 
-.llm-standalone-confirm-actions {
+.llm-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
 }
 
-.llm-standalone-confirm-btn {
+.llm-modal-btn {
   appearance: none;
   -moz-appearance: none;
   min-width: 74px;
@@ -2573,33 +2581,98 @@ item-pane-section.llm-reader-ai-source-section {
   cursor: pointer;
 }
 
-.llm-standalone-confirm-btn:focus-visible {
-  outline: 2px solid var(--color-accent, #2563eb);
+.llm-modal-btn:focus-visible {
+  outline: 2px solid var(--fill-tertiary);
   outline-offset: 2px;
 }
 
-.llm-standalone-confirm-cancel {
+.llm-modal-cancel {
   background: transparent;
   color: var(--fill-primary);
 }
 
-.llm-standalone-confirm-cancel:hover {
+.llm-modal-cancel:hover {
   background: var(--fill-quinary);
 }
 
-.llm-standalone-confirm-primary {
-  border-color: var(--color-accent, #2563eb);
-  background: var(--color-accent, #2563eb);
-  color: white;
+.llm-modal-primary {
+  border-color: var(--fill-primary);
+  background: var(--fill-primary);
+  color: var(--material-background);
 }
 
-.llm-standalone-confirm-primary:hover {
-  filter: brightness(1.06);
+.llm-modal-primary:hover {
+  filter: none;
+  opacity: 0.88;
 }
 
 .llm-standalone-confirm-destructive {
   border-color: #c2410c;
   background: #c2410c;
+}
+
+.llm-modal-primary:disabled {
+  cursor: default;
+  filter: none;
+  opacity: 0.5;
+}
+
+.llm-conversation-rename-form,
+.llm-shortcut-edit-form {
+  margin-top: 12px;
+}
+
+.llm-conversation-rename-input,
+.llm-shortcut-edit-control {
+  appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 6px 9px;
+  border: 1px solid var(--llm-modal-control-border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--llm-modal-control-background);
+  color: var(--fill-primary);
+  font: inherit;
+  font-size: var(--llm-fs-12, 12px);
+}
+
+.llm-conversation-rename-input:focus,
+.llm-conversation-rename-input:focus-visible,
+.llm-shortcut-edit-control:focus,
+.llm-shortcut-edit-control:focus-visible {
+  border-color: var(--llm-modal-control-border);
+  outline: none;
+  box-shadow: none;
+}
+
+.llm-shortcut-edit-dialog {
+  width: min(92vw, 420px);
+}
+
+.llm-shortcut-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.llm-shortcut-edit-field + .llm-shortcut-edit-field {
+  margin-top: 12px;
+}
+
+.llm-shortcut-edit-label {
+  color: var(--fill-primary);
+  font-size: var(--llm-fs-12, 12px);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.llm-shortcut-edit-prompt {
+  min-height: 116px;
+  line-height: 1.4;
+  resize: none;
 }
 
 /* Panel — expandable conversation list */
@@ -2725,6 +2798,7 @@ item-pane-section.llm-reader-ai-source-section {
   text-overflow: ellipsis;
 }
 
+.llm-standalone-conv-rename,
 .llm-standalone-conv-delete {
   flex-shrink: 0;
   width: 20px;
@@ -2739,16 +2813,42 @@ item-pane-section.llm-reader-ai-source-section {
   margin-left: 4px;
 }
 
+.llm-standalone-conv-rename::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  background-color: currentColor;
+  mask-image: url("icons/action-edit.svg");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-image: url("icons/action-edit.svg");
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
 .llm-standalone-conv-delete::before {
   content: "\00D7"; /* × */
 }
 
-.llm-standalone-conv-item:hover .llm-standalone-conv-delete {
+.llm-standalone-conv-item:hover .llm-standalone-conv-rename,
+.llm-standalone-conv-item:hover .llm-standalone-conv-delete,
+.llm-standalone-conv-item:focus-within .llm-standalone-conv-rename,
+.llm-standalone-conv-item:focus-within .llm-standalone-conv-delete {
   display: flex;
 }
 
+.llm-standalone-conv-rename:hover,
 .llm-standalone-conv-delete:hover {
   background: color-mix(in srgb, var(--fill-quaternary) 60%, transparent);
+}
+
+.llm-standalone-conv-rename:hover {
+  color: var(--fill-primary);
+}
+
+.llm-standalone-conv-delete:hover {
   color: #e74c3c;
 }
 
@@ -3501,6 +3601,7 @@ item-pane-section.llm-reader-ai-source-section {
   white-space: nowrap;
 }
 
+.llm-history-item-rename,
 .llm-history-item-delete {
   flex-shrink: 0;
   width: 20px;
@@ -3515,16 +3616,42 @@ item-pane-section.llm-reader-ai-source-section {
   margin-left: 4px;
 }
 
+.llm-history-item-rename::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  background-color: currentColor;
+  mask-image: url("icons/action-edit.svg");
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-image: url("icons/action-edit.svg");
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+
 .llm-history-item-delete::before {
   content: "\00D7";
 }
 
-.llm-history-item:hover .llm-history-item-delete {
+.llm-history-item:hover .llm-history-item-rename,
+.llm-history-item:hover .llm-history-item-delete,
+.llm-history-item:focus-within .llm-history-item-rename,
+.llm-history-item:focus-within .llm-history-item-delete {
   display: flex;
 }
 
+.llm-history-item-rename:hover,
 .llm-history-item-delete:hover {
   background: color-mix(in srgb, var(--fill-quaternary) 60%, transparent);
+}
+
+.llm-history-item-rename:hover {
+  color: var(--fill-primary);
+}
+
+.llm-history-item-delete:hover {
   color: #e74c3c;
 }
 
