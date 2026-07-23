@@ -1,7 +1,7 @@
 {
   "name": "llm-for-zotero",
   "type": "module",
-  "version": "3.8.28",
+  "version": "3.8.29",
   "description": "An unofficial UI-focused fork of LLM-for-Zotero with a redesigned chat interface",
   "config": {
     "addonName": "LLM-for-Zotero — UI Edition",
