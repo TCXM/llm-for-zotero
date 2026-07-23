@@ -484,6 +484,7 @@ import {
 } from "../../claudeCode/prefs";
 import {
   getCodexReasoningModePref,
+  getCodexRuntimeModelDisplayPref,
   getCodexRuntimeModelPref,
   getLastUsedCodexConversationMode,
   getLastUsedCodexGlobalConversationKey,
@@ -495,6 +496,7 @@ import {
   setLastUsedCodexPaperConversationKey,
   setLastUsedCodexConversationMode,
   setCodexReasoningModePref,
+  setCodexRuntimeModelDisplayPref,
   setCodexRuntimeModelPref,
 } from "../../codexAppServer/prefs";
 import { getConfiguredCodexAppServerBinaryPath } from "../../codexAppServer/binaryPath";
@@ -947,6 +949,16 @@ export function setupHandlers(
         codexModelCatalogModels = catalog.models;
         codexModelCatalogStatus = "ready";
         codexModelCatalogError = "";
+        const selectedModel = getCodexRuntimeModelPref();
+        const selectedCatalogModel = catalog.models.find(
+          (model) => model.model.toLowerCase() === selectedModel.toLowerCase(),
+        );
+        if (selectedCatalogModel) {
+          setCodexRuntimeModelDisplayPref(
+            selectedCatalogModel.model,
+            selectedCatalogModel.displayName,
+          );
+        }
         reconcileSelectedCodexReasoningMode();
       })
       .catch((error: unknown) => {
@@ -967,6 +979,7 @@ export function setupHandlers(
     return buildCodexRuntimeModelEntries({
       models: codexModelCatalogModels,
       selectedModel: model,
+      selectedModelDisplayLabel: getCodexRuntimeModelDisplayPref(model),
       codexPath: getConfiguredCodexAppServerBinaryPath(),
     });
   };
@@ -4840,6 +4853,10 @@ export function setupHandlers(
           }
           if (isCodexConversationSystem()) {
             setCodexRuntimeModelPref(entry.model);
+            setCodexRuntimeModelDisplayPref(
+              entry.model,
+              entry.displayModelLabel,
+            );
             reconcileSelectedCodexReasoningMode();
             setFloatingMenuOpen(modelMenu, MODEL_MENU_OPEN_CLASS, false);
             setFloatingMenuOpen(
@@ -5933,6 +5950,9 @@ export function setupHandlers(
   // until setup-local helpers are ready, then flush once.
   refreshAutoLoadedPaperContextForCurrentItem();
   syncModelFromPrefs();
+  if (isCodexConversationSystem()) {
+    void ensureCodexModelCatalogLoaded();
+  }
   flushResponsiveLayoutSyncNow();
   // Set active_target before applyWebChatModeUI so sidebar filters by the correct site
   try {

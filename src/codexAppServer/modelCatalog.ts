@@ -260,9 +260,12 @@ function createRuntimeModelEntry(params: {
 export function buildCodexRuntimeModelEntries(params: {
   models: CodexAppServerModelCatalogEntry[];
   selectedModel: string;
+  selectedModelDisplayLabel?: string;
   codexPath?: string;
 }): RuntimeModelEntry[] {
   const selectedModel = params.selectedModel.trim();
+  const selectedModelDisplayLabel =
+    params.selectedModelDisplayLabel?.trim() || selectedModel;
   const entries: RuntimeModelEntry[] = [];
   const seenModels = new Set<string>();
 
@@ -274,7 +277,7 @@ export function buildCodexRuntimeModelEntries(params: {
       entries.push(
         createRuntimeModelEntry({
           model: selectedModel,
-          displayModelLabel: selectedModel,
+          displayModelLabel: selectedModelDisplayLabel,
           codexPath: params.codexPath,
         }),
       );

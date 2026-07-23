@@ -176,6 +176,18 @@ describe("Codex app-server model catalog", function () {
     );
   });
 
+  it("uses the cached catalog label while the Codex catalog loads", function () {
+    const entries = buildCodexRuntimeModelEntries({
+      models: [],
+      selectedModel: "gpt-5.6-luna",
+      selectedModelDisplayLabel: "GPT-5.6-Luna",
+      codexPath: "",
+    });
+
+    assert.equal(entries[0]?.model, "gpt-5.6-luna");
+    assert.equal(entries[0]?.displayModelLabel, "GPT-5.6-Luna");
+  });
+
   it("uses the selected catalog model's advertised reasoning efforts", function () {
     const choices = getCodexAppServerReasoningChoices({
       models: [

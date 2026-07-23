@@ -120,7 +120,53 @@ export function getCodexRuntimeModelPref(): CodexRuntimeModel {
 
 export function setCodexRuntimeModelPref(model: string): void {
   const normalized = model.trim() || DEFAULT_CODEX_RUNTIME_MODEL;
+  const previous = getCodexRuntimeModelPref();
   setPref("codexAppServerModel", normalized);
+  if (previous.toLowerCase() !== normalized.toLowerCase()) {
+    setPref("codexAppServerModelDisplay", "");
+  }
+}
+
+export function getCodexRuntimeModelDisplayPref(model: string): string {
+  const normalizedModel = model.trim();
+  if (!normalizedModel) return "";
+  const raw = getStringPref("codexAppServerModelDisplay").trim();
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as {
+      model?: unknown;
+      displayName?: unknown;
+    };
+    if (
+      typeof parsed.model !== "string" ||
+      parsed.model.trim().toLowerCase() !== normalizedModel.toLowerCase() ||
+      typeof parsed.displayName !== "string"
+    ) {
+      return "";
+    }
+    return parsed.displayName.trim();
+  } catch {
+    return "";
+  }
+}
+
+export function setCodexRuntimeModelDisplayPref(
+  model: string,
+  displayName: string,
+): void {
+  const normalizedModel = model.trim();
+  const normalizedDisplayName = displayName.trim();
+  if (!normalizedModel || !normalizedDisplayName) {
+    setPref("codexAppServerModelDisplay", "");
+    return;
+  }
+  setPref(
+    "codexAppServerModelDisplay",
+    JSON.stringify({
+      model: normalizedModel,
+      displayName: normalizedDisplayName,
+    }),
+  );
 }
 
 export function getCodexReasoningModePref(): CodexReasoningMode {

@@ -2,6 +2,7 @@ import { assert } from "chai";
 import {
   getCodexAppServerApprovalsReviewerPref,
   getCodexReasoningModePref,
+  getCodexRuntimeModelDisplayPref,
   getCodexRuntimeModelPref,
   isCodexZoteroMcpToolsEnabled,
   isCodexAppServerNativeApprovalsEnabled,
@@ -9,6 +10,7 @@ import {
   setCodexAppServerApprovalsReviewerPref,
   setCodexAppServerNativeApprovalsEnabled,
   setCodexReasoningModePref,
+  setCodexRuntimeModelDisplayPref,
   setCodexRuntimeModelPref,
   setNativeZoteroMcpToolsEnabled,
 } from "../src/codexAppServer/prefs";
@@ -33,6 +35,42 @@ describe("codexAppServer prefs", function () {
       setCodexRuntimeModelPref("gpt-5.5-codex-preview");
 
       assert.equal(getCodexRuntimeModelPref(), "gpt-5.5-codex-preview");
+    } finally {
+      if (originalZotero) {
+        globalScope.Zotero = originalZotero;
+      } else {
+        delete globalScope.Zotero;
+      }
+    }
+  });
+
+  it("keeps the catalog display name paired with its model", function () {
+    const globalScope = globalThis as typeof globalThis & {
+      Zotero?: unknown;
+    };
+    const originalZotero = globalScope.Zotero;
+    const prefs = new Map<string, unknown>();
+    try {
+      globalScope.Zotero = {
+        Prefs: {
+          get: (key: string) => prefs.get(key),
+          set: (key: string, value: unknown) => {
+            prefs.set(key, value);
+          },
+        },
+      };
+
+      setCodexRuntimeModelPref("gpt-5.6-luna");
+      setCodexRuntimeModelDisplayPref("gpt-5.6-luna", "GPT-5.6-Luna");
+
+      assert.equal(
+        getCodexRuntimeModelDisplayPref("gpt-5.6-luna"),
+        "GPT-5.6-Luna",
+      );
+      assert.equal(getCodexRuntimeModelDisplayPref("gpt-5.6-sol"), "");
+
+      setCodexRuntimeModelPref("gpt-5.6-sol");
+      assert.equal(getCodexRuntimeModelDisplayPref("gpt-5.6-sol"), "");
     } finally {
       if (originalZotero) {
         globalScope.Zotero = originalZotero;
