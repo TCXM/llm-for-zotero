@@ -3398,9 +3398,15 @@ item-pane-section.llm-reader-ai-source-section {
 }
 
 .llm-history-item.active {
-  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
-  color: var(--color-accent);
+  background: color-mix(
+    in srgb,
+    var(--fill-quinary) 84%,
+    var(--material-background) 16%
+  );
+  color: var(--fill-primary);
   font-weight: 500;
+  box-shadow: inset 2px 0 0
+    color-mix(in srgb, var(--fill-tertiary) 72%, transparent);
 }
 
 .llm-history-item.pending-delete {
@@ -3656,7 +3662,11 @@ item-pane-section.llm-reader-ai-source-section {
     var(--fill-secondary) 28%,
     var(--stroke-secondary)
   );
-  background: transparent;
+  background: color-mix(
+    in srgb,
+    var(--fill-quinary) 84%,
+    var(--material-background) 16%
+  );
 }
 
 .llm-history-menu-row.active::before {
@@ -3665,8 +3675,8 @@ item-pane-section.llm-reader-ai-source-section {
   left: 0;
   top: 0;
   bottom: 0;
-  width: 3px;
-  background: color-mix(in srgb, var(--color-accent) 84%, #ffffff 16%);
+  width: 2px;
+  background: color-mix(in srgb, var(--fill-tertiary) 72%, transparent);
 }
 
 .llm-history-menu-row.pending-delete {
