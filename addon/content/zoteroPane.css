@@ -506,12 +506,13 @@ item-pane-section.llm-reader-ai-source-section {
 
 .llm-modern-chat-pane .llm-actions {
   --llm-action-height: 28px;
-  --llm-action-icon-size: 16px;
+  --llm-action-icon-size: 20px;
+  --llm-action-dropdown-icon-width: 28px;
   min-height: 28px;
 }
 
 .llm-modern-chat-pane .llm-actions-left {
-  gap: 0;
+  gap: 4px;
 }
 
 .llm-modern-chat-pane .llm-actions .llm-shortcut-btn {
@@ -587,6 +588,24 @@ item-pane-section.llm-reader-ai-source-section {
   width: 28px;
   min-width: 28px;
   padding: 0;
+}
+
+.llm-modern-chat-pane .llm-actions .llm-model-btn,
+.llm-modern-chat-pane .llm-actions .llm-reasoning-btn {
+  padding-inline: 8px;
+}
+
+.llm-modern-chat-pane
+  .llm-action-slot.llm-model-dropdown
+  > .llm-model-btn.llm-model-btn-collapsed,
+.llm-modern-chat-pane
+  .llm-action-slot.llm-reasoning-dropdown
+  > .llm-reasoning-btn.llm-reasoning-btn-collapsed {
+  width: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  padding: 0;
+  justify-content: center;
 }
 
 .llm-modern-chat-pane .llm-actions .llm-send-btn:not(.llm-cancel-btn) {
@@ -10340,11 +10359,8 @@ label.llm-search-results-item:hover {
   --llm-action-icon-size: 18px;
   --llm-action-icon-font-size: var(--llm-action-icon-size);
   --llm-action-font-size: var(--llm-fs-11);
-  --llm-action-dropdown-icon-width: 56px;
-  --llm-action-dropdown-icon-left-padding: 9px;
-  --llm-action-dropdown-icon-right-padding: 23px;
+  --llm-action-dropdown-icon-width: 36px;
   --llm-action-dropdown-slot-width: calc(1.2em + 12px);
-  --llm-action-dropdown-icon-right: 6px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -11010,9 +11026,8 @@ label.llm-search-results-item:hover {
   width: var(--llm-action-dropdown-icon-width);
   min-width: var(--llm-action-dropdown-icon-width);
   max-width: var(--llm-action-dropdown-icon-width);
-  padding: 0 var(--llm-action-dropdown-icon-right-padding) 0
-    var(--llm-action-dropdown-icon-left-padding);
-  justify-content: flex-start;
+  padding: 0;
+  justify-content: center;
   align-items: center;
   text-align: center;
   white-space: nowrap;
@@ -11029,9 +11044,8 @@ label.llm-search-results-item:hover {
   width: var(--llm-action-dropdown-icon-width);
   min-width: var(--llm-action-dropdown-icon-width);
   max-width: var(--llm-action-dropdown-icon-width);
-  padding: 0 var(--llm-action-dropdown-icon-right-padding) 0
-    var(--llm-action-dropdown-icon-left-padding);
-  justify-content: flex-start;
+  padding: 0;
+  justify-content: center;
   align-items: center;
   text-align: center;
   white-space: nowrap;
@@ -11057,40 +11071,8 @@ label.llm-search-results-item:hover {
 
 .llm-model-btn::after,
 .llm-reasoning-btn::after {
-  content: "▾";
-  position: static;
-  width: auto;
-  height: auto;
-  border-right: none;
-  border-bottom: none;
-  transform: none;
-  font-family: sans-serif;
-  font-size: 12px;
-  line-height: 1;
-  opacity: 0.9;
-  pointer-events: none;
-  flex: 0 0 auto;
-  margin-left: 2px;
-}
-
-.llm-model-btn.llm-model-btn-collapsed::after {
-  display: block;
-  right: 8px;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  opacity: 0.95;
-  margin-left: 0;
-}
-
-.llm-reasoning-btn.llm-reasoning-btn-collapsed::after {
-  display: block;
-  right: 8px;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  opacity: 0.95;
-  margin-left: 0;
+  content: none;
+  display: none;
 }
 
 .llm-reasoning-btn-unavailable {

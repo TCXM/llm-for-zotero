@@ -199,7 +199,19 @@ describe("reader dedicated AI pane", function () {
     );
     assert.match(
       styles,
-      /\.llm-modern-chat-pane \.llm-actions \{[\s\S]*?--llm-action-height: 28px;[\s\S]*?--llm-action-icon-size: 16px;/,
+      /\.llm-modern-chat-pane \.llm-actions \{[\s\S]*?--llm-action-height: 28px;[\s\S]*?--llm-action-icon-size: 20px;[\s\S]*?--llm-action-dropdown-icon-width: 28px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-actions-left \{[\s\S]*?gap: 4px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-actions \.llm-model-btn,[\s\S]*?\.llm-modern-chat-pane \.llm-actions \.llm-reasoning-btn \{[\s\S]*?padding-inline: 8px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-model-btn::after,[\s\S]*?\.llm-reasoning-btn::after \{[\s\S]*?content: none;[\s\S]*?display: none;/,
     );
     assert.match(
       styles,

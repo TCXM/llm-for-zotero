@@ -116,6 +116,12 @@ export function createActionLayoutController(
       reasoningBtn?.textContent ||
       "off";
     const reasoningHint = reasoningBtn?.dataset.reasoningHint || "";
+    const contextIconWidth = preferCompactSend
+      ? 28
+      : ACTION_LAYOUT_CONTEXT_ICON_WIDTH_PX;
+    const dropdownIconWidth = preferCompactSend
+      ? 28
+      : ACTION_LAYOUT_DROPDOWN_ICON_WIDTH_PX;
 
     const immediateAvailableWidth = (() => {
       const rowWidth = actionsRow?.clientWidth || 0;
@@ -205,10 +211,8 @@ export function createActionLayoutController(
       const borderWidth =
         getComputedSizePx(style, "border-left-width") +
         getComputedSizePx(style, "border-right-width");
-      const chevronAllowance =
-        button === modelBtn || button === reasoningBtn ? 16 : 0;
       return Math.ceil(
-        wrappedTextWidth + paddingWidth + borderWidth + chevronAllowance,
+        wrappedTextWidth + paddingWidth + borderWidth,
       );
     };
 
@@ -269,7 +273,7 @@ export function createActionLayoutController(
 
     const getModelWidth = (mode: ModelLabelMode) => {
       if (!modelBtn) return 0;
-      if (mode === "icon") return ACTION_LAYOUT_DROPDOWN_ICON_WIDTH_PX;
+      if (mode === "icon") return dropdownIconWidth;
       const maxLines =
         mode === "full-wrap2" ? ACTION_LAYOUT_MODEL_FULL_MAX_LINES : 1;
       return getFullSlotRequiredWidth(
@@ -284,13 +288,13 @@ export function createActionLayoutController(
       if (!reasoningBtn) return 0;
       return mode === "full"
         ? getFullSlotRequiredWidth(reasoningSlot, reasoningBtn, reasoningLabel)
-        : ACTION_LAYOUT_DROPDOWN_ICON_WIDTH_PX;
+        : dropdownIconWidth;
     };
 
     const getSendWidth = (mode: ActionLabelMode) => {
       if (!sendBtn) return 0;
       if (mode === "icon") {
-        return ACTION_LAYOUT_CONTEXT_ICON_WIDTH_PX;
+        return contextIconWidth;
       }
       const sendWidth = getFullSlotRequiredWidth(sendSlot, sendBtn, "Send");
       const cancelWidth = getFullSlotRequiredWidth(
@@ -308,12 +312,12 @@ export function createActionLayoutController(
               uploadSlot || uploadBtn,
               Math.max(
                 uploadBtn.scrollWidth || 0,
-                ACTION_LAYOUT_CONTEXT_ICON_WIDTH_PX,
+                contextIconWidth,
               ),
             )
           : 0,
-        selectTextBtn ? ACTION_LAYOUT_CONTEXT_ICON_WIDTH_PX : 0,
-        screenshotBtn ? ACTION_LAYOUT_CONTEXT_ICON_WIDTH_PX : 0,
+        selectTextBtn ? contextIconWidth : 0,
+        screenshotBtn ? contextIconWidth : 0,
         getModelWidth(state.model),
         getReasoningWidth(state.reasoning),
       ].filter((width) => width > 0);
