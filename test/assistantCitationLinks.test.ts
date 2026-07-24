@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  buildQuoteCardPreviewText,
   clearCachedCitationPagesForTests,
   collectAssistantCitationCandidates,
   decorateAssistantCitationLinks,
@@ -133,6 +134,15 @@ function makeCitationCandidate(
 const originalZotero = globalScope.Zotero;
 
 describe("assistantCitationLinks", function () {
+  it("preserves literal Markdown-like text in collapsed quote previews", function () {
+    assert.equal(
+      buildQuoteCardPreviewText(
+        "**init** computes 2 ** 3 while foo__bar stays literal.\n\n[[quote:Q_hidden]]",
+      ),
+      "**init** computes 2 ** 3 while foo__bar stays literal.",
+    );
+  });
+
   afterEach(function () {
     clearCachedCitationPagesForTests();
     if (originalZotero === undefined) {

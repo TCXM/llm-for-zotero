@@ -570,13 +570,25 @@ describe("Mermaid rendering helpers", function () {
     assert.include(normalized, "style A fill:#151515,stroke:#333333");
   });
 
-  it("adds SVG polish rules for the expanded Mermaid viewer", function () {
+  it("scopes SVG polish rules to the expanded Mermaid viewer", function () {
     const svg =
       '<svg viewBox="0 0 10 10"><g class="cluster"><rect /></g></svg>';
 
-    const polished = polishRenderedMermaidSvg(svg, "light");
+    for (const [theme, background] of [
+      ["light", "#ffffff"],
+      ["dark", "#151515"],
+    ] as const) {
+      const polished = polishRenderedMermaidSvg(svg, theme);
 
-    assert.include(polished, 'data-llm-mermaid-polished="true"');
+      assert.include(polished, 'data-llm-mermaid-polished="true"');
+      assert.include(
+        polished,
+        `svg[data-llm-mermaid-polished]{background:${background}`,
+      );
+      assert.notMatch(polished, /<style>\s*svg\s*\{/);
+    }
+
+    const polished = polishRenderedMermaidSvg(svg, "light");
     assert.include(polished, ".cluster rect{fill:#ffffff!important");
     assert.include(polished, ".flowchart-link{stroke:#6b7280!important");
   });
@@ -1320,9 +1332,7 @@ describe("agentTrace render", function () {
           (text) =>
             text.includes("simple-paper-QA") || text.includes("final answer"),
         ),
-      [
-        "<p>I’m using the simple-paper-QA skill.</p>",
-      ],
+      ["<p>I’m using the simple-paper-QA skill.</p>"],
       "the completed trace keeps process narration but omits the canonical final answer",
     );
     assert.isFalse(suppressFinalAnswer);
@@ -1425,9 +1435,7 @@ describe("agentTrace render", function () {
       /^Worked for /,
     );
     assert.isFalse(suppressStreamingAnswer);
-    assert.isNotNull(
-      streamingTrace.findByClass("llm-agent-output-divider"),
-    );
+    assert.isNotNull(streamingTrace.findByClass("llm-agent-output-divider"));
 
     controller.finish("This is the final answer.");
     const events = message.pendingAgentTraceEvents || [];

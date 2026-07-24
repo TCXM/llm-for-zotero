@@ -4217,6 +4217,7 @@ item-pane-section.llm-reader-ai-source-section {
   gap: 4px;
   max-width: 100%;
   min-width: 0;
+  contain: layout paint style;
 }
 
 .llm-message-wrapper.user {
@@ -8068,6 +8069,10 @@ label.llm-search-results-item:hover {
 /* KaTeX specific styling */
 .llm-rendered-markdown .katex {
   font-size: 1.1em;
+}
+
+.llm-rendered-markdown .katex svg {
+  background: transparent;
 }
 
 .llm-rendered-markdown .math-display .katex {

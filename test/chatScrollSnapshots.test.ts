@@ -173,6 +173,89 @@ function appendElement(
 }
 
 describe("chat scroll snapshots", function () {
+  it("rerenders only quote-validated assistant wrappers", function () {
+    const chatSource = readFileSync(
+      resolve(here, "../src/modules/contextPanel/chat.ts"),
+      "utf8",
+    );
+    const validationRefreshStart = chatSource.indexOf(
+      "function refreshConversationAfterQuoteValidation(",
+    );
+    const validationRefreshEnd = chatSource.indexOf(
+      "function startConversationQuoteValidation(",
+      validationRefreshStart,
+    );
+    const validationRefreshSource = chatSource.slice(
+      validationRefreshStart,
+      validationRefreshEnd,
+    );
+    const refreshChatStart = chatSource.indexOf("export function refreshChat(");
+    const refreshChatEnd = chatSource.indexOf(
+      "export function refreshConversationPanels(",
+      refreshChatStart,
+    );
+    const refreshChatSource = chatSource.slice(
+      refreshChatStart,
+      refreshChatEnd,
+    );
+    const validationTaskStart = chatSource.indexOf(
+      "function startConversationQuoteValidation(",
+    );
+    const validationTaskEnd = chatSource.indexOf(
+      "function scheduleAssistantMessageQuoteValidation(",
+      validationTaskStart,
+    );
+    const validationTaskSource = chatSource.slice(
+      validationTaskStart,
+      validationTaskEnd,
+    );
+
+    assert.include(
+      validationRefreshSource,
+      "rerenderAssistantMessages: changedMessages",
+    );
+    assert.notInclude(validationRefreshSource, "refreshConversationPanels(");
+    // The validation task classifies on-screen messages first and flips each
+    // one the moment it is classified (progressive refresh), instead of
+    // accumulating a batch and refreshing once at the end.
+    assert.include(
+      validationTaskSource,
+      "orderQuoteValidationBatchByViewportPriority(",
+    );
+    assert.include(
+      validationTaskSource,
+      "promptTimeoutMs: QUOTE_VALIDATION_PROMPT_IDLE_MS",
+    );
+    assert.equal(
+      validationTaskSource.match(/for \(const request of batch\)/g)?.length,
+      1,
+    );
+    assert.notInclude(validationTaskSource, "preparedEvidence");
+    assert.isBelow(
+      validationTaskSource.indexOf(
+        "buildCachedQuoteSourceEvidenceForPaperContexts(",
+      ),
+      validationTaskSource.indexOf("applyAssistantMessageQuoteGate("),
+    );
+    assert.include(validationTaskSource, "new Set([assistantMessage])");
+    assert.notInclude(validationTaskSource, "changedMessages.add(");
+    assert.include(refreshChatSource, "targetedMessageWrappers");
+    assert.include(
+      refreshChatSource,
+      "candidate.dataset.messageIndex === `${messageIndex}`",
+    );
+    assert.include(
+      refreshChatSource,
+      "wrapper.dataset.messageIndex = `${index}`",
+    );
+    assert.include(refreshChatSource, "existingTargetedWrapper.replaceWith");
+    assert.include(refreshChatSource, "if (!useTargetedRerender)");
+    assert.include(
+      refreshChatSource,
+      "if (tokenUsageEl && !useTargetedRerender)",
+    );
+  });
+
   it("restores a quote anchor after rerendered message heights change", function () {
     clearChatScrollSnapshotsForTests();
     const conversationKey = 42;

@@ -3714,7 +3714,7 @@ const MAX_QUOTE_VALIDATION_DECISION_ENTRIES = 1000;
 const MAX_QUOTE_VALIDATION_DECISION_BYTES = 4 * 1024 * 1024;
 const MAX_QUOTE_SOURCE_INDEX_ENTRIES = 64;
 const MAX_QUOTE_SOURCE_INDEX_BYTES = 2 * 1024 * 1024;
-const QUOTE_VALIDATION_POLICY_VERSION = 3;
+const QUOTE_VALIDATION_POLICY_VERSION = 5;
 type QuoteValidationDecision = ReturnType<
   typeof finalizeAssistantQuoteCitations
 >;
@@ -4098,13 +4098,15 @@ const quoteValidationTasks = new Map<number, Promise<void>>();
 
 function refreshConversationAfterQuoteValidation(
   conversationKey: number,
+  changedMessages: ReadonlySet<Message>,
 ): void {
   for (const [body, getItem] of activeContextPanels.entries()) {
     if (!body.isConnected) continue;
     const item = getItem?.() || null;
     if (!item || getConversationKey(item) !== conversationKey) continue;
-    refreshConversationPanels(body, item);
-    return;
+    refreshChat(body, item, {
+      rerenderAssistantMessages: changedMessages,
+    });
   }
 }
 
@@ -4138,17 +4140,68 @@ function conversationHasStreamingMessage(conversationKey: number): boolean {
   );
 }
 
+// The first idle wait of a validation pass gates how soon the first quote block
+// can flip to its verified/unverified state. Keep it short so the on-screen
+// message classifies within a frame or two; the long tail stays cooperative.
+const QUOTE_VALIDATION_PROMPT_IDLE_MS = 32;
+
+/**
+ * Order a validation batch so the messages nearest the bottom of the
+ * conversation — the ones actually on screen when a chat is opened (it scrolls
+ * to the latest message) — are classified first. Messages no longer present in
+ * history are stale and sort last. Pure and non-mutating for testability.
+ */
+export function orderQuoteValidationBatchByViewportPriority<
+  T extends { assistantMessage: Message },
+>(batch: readonly T[], history: readonly Message[]): T[] {
+  return batch
+    .map((request, originalIndex) => ({
+      request,
+      originalIndex,
+      historyIndex: history.indexOf(request.assistantMessage),
+    }))
+    .sort((a, b) => {
+      if (a.historyIndex !== b.historyIndex) {
+        return b.historyIndex - a.historyIndex;
+      }
+      return a.originalIndex - b.originalIndex;
+    })
+    .map((entry) => entry.request);
+}
+
+/**
+ * Resolve the idle-callback timeout and setTimeout-fallback delay for a
+ * validation wait. A `promptTimeoutMs` collapses both to a short, prompt budget;
+ * otherwise the cooperative defaults apply (longer while panels are open to stay
+ * responsive during heavy work).
+ */
+export function resolveQuoteValidationIdleTimeouts(
+  hasActivePanels: boolean,
+  promptTimeoutMs?: number,
+): { idleTimeout: number; fallbackDelayMs: number } {
+  if (typeof promptTimeoutMs === "number" && Number.isFinite(promptTimeoutMs)) {
+    const clamped = Math.max(0, promptTimeoutMs);
+    return { idleTimeout: clamped, fallbackDelayMs: clamped };
+  }
+  return { idleTimeout: 1200, fallbackDelayMs: hasActivePanels ? 250 : 16 };
+}
+
 async function waitForQuoteValidationIdle(
   conversationKey: number,
   shouldContinue: () => boolean = () => true,
+  options?: { promptTimeoutMs?: number },
 ): Promise<boolean> {
   while (true) {
     if (!shouldContinue()) return false;
     const win = getQuoteValidationWindow(conversationKey);
+    const { idleTimeout, fallbackDelayMs } = resolveQuoteValidationIdleTimeouts(
+      activeContextPanels.size > 0,
+      options?.promptTimeoutMs,
+    );
     const deadline = await new Promise<QuoteValidationIdleDeadline>(
       (resolve) => {
         if (typeof win?.requestIdleCallback === "function") {
-          win.requestIdleCallback(resolve, { timeout: 1200 });
+          win.requestIdleCallback(resolve, { timeout: idleTimeout });
           return;
         }
         const schedule = win?.setTimeout?.bind(win) || setTimeout;
@@ -4158,7 +4211,7 @@ async function waitForQuoteValidationIdle(
               didTimeout: false,
               timeRemaining: () => 8,
             }),
-          activeContextPanels.size ? 250 : 16,
+          fallbackDelayMs,
         );
       },
     );
@@ -4196,7 +4249,9 @@ function startConversationQuoteValidation(conversationKey: number): void {
     const hasPendingRequest = () =>
       Boolean(pendingQuoteValidations.get(conversationKey)?.size);
     if (
-      !(await waitForQuoteValidationIdle(conversationKey, hasPendingRequest))
+      !(await waitForQuoteValidationIdle(conversationKey, hasPendingRequest, {
+        promptTimeoutMs: QUOTE_VALIDATION_PROMPT_IDLE_MS,
+      }))
     ) {
       return;
     }
@@ -4204,8 +4259,13 @@ function startConversationQuoteValidation(conversationKey: number): void {
       const pending = pendingQuoteValidations.get(conversationKey);
       if (!pending?.size) break;
       pendingQuoteValidations.delete(conversationKey);
-      const batch = Array.from(pending.values());
-      let displayChanged = false;
+      // Classify the messages nearest the bottom (the ones on screen when the
+      // chat opens) first, so their quotes flip without waiting on scrolled-off
+      // history.
+      const batch = orderQuoteValidationBatchByViewportPriority(
+        Array.from(pending.values()),
+        chatHistory.get(conversationKey) || [],
+      );
       try {
         const batchHasCurrentRequest = () =>
           batch.some((request) =>
@@ -4225,34 +4285,6 @@ function startConversationQuoteValidation(conversationKey: number): void {
             shouldContinue: batchHasCurrentRequest,
           },
         );
-        const preparedEvidence = new Map<
-          PendingQuoteValidation,
-          {
-            evidence: QuoteSourceEvidence;
-            sourceIndex?: ReturnType<typeof buildQuoteSourceIndex>;
-          }
-        >();
-        for (const request of batch) {
-          const hasIdleTime = await waitForQuoteValidationIdle(
-            conversationKey,
-            () => isPendingQuoteValidationCurrent(conversationKey, request),
-          );
-          if (!hasIdleTime) continue;
-          const evidence = buildCachedQuoteSourceEvidenceForPaperContexts(
-            ...quoteSourcePaperContextGroups(request.options),
-          );
-          const evidenceSignature =
-            buildQuoteValidationEvidenceSignature(evidence);
-          preparedEvidence.set(request, {
-            evidence,
-            sourceIndex: evidenceSignature
-              ? getOrBuildCachedQuoteSourceIndex(
-                  evidenceSignature,
-                  evidence.sourceTexts,
-                )
-              : undefined,
-          });
-        }
         for (const request of batch) {
           const { assistantMessage, rawMarkdown, rawQuoteCitations, options } =
             request;
@@ -4261,31 +4293,47 @@ function startConversationQuoteValidation(conversationKey: number): void {
             () => isPendingQuoteValidationCurrent(conversationKey, request),
           );
           if (!hasIdleTime) continue;
-          const isCurrent = isPendingQuoteValidationCurrent(
-            conversationKey,
-            request,
+          if (!isPendingQuoteValidationCurrent(conversationKey, request)) {
+            continue;
+          }
+          const evidence = buildCachedQuoteSourceEvidenceForPaperContexts(
+            ...quoteSourcePaperContextGroups(options),
           );
-          if (!isCurrent) continue;
-          const prepared = preparedEvidence.get(request);
-          if (!prepared) continue;
-          displayChanged =
-            (await applyAssistantMessageQuoteGate(
-              assistantMessage,
-              rawMarkdown,
-              rawQuoteCitations,
-              prepared.evidence,
-              options,
-              prepared.sourceIndex,
-              {
-                yieldToMain: async () => {
-                  await waitForQuoteValidationIdle(conversationKey, () =>
-                    isPendingQuoteValidationCurrent(conversationKey, request),
-                  );
-                },
-                shouldContinue: () =>
+          const evidenceSignature =
+            buildQuoteValidationEvidenceSignature(evidence);
+          const sourceIndex = evidenceSignature
+            ? getOrBuildCachedQuoteSourceIndex(
+                evidenceSignature,
+                evidence.sourceTexts,
+              )
+            : undefined;
+          const changed = await applyAssistantMessageQuoteGate(
+            assistantMessage,
+            rawMarkdown,
+            rawQuoteCitations,
+            evidence,
+            options,
+            sourceIndex,
+            {
+              yieldToMain: async () => {
+                await waitForQuoteValidationIdle(conversationKey, () =>
                   isPendingQuoteValidationCurrent(conversationKey, request),
+                );
               },
-            )) || displayChanged;
+              shouldContinue: () =>
+                isPendingQuoteValidationCurrent(conversationKey, request),
+            },
+          );
+          if (changed) {
+            // Flip this message the moment it is classified so quotes appear
+            // progressively, rather than holding every result until the whole
+            // batch finishes. The targeted re-render only rebuilds this one
+            // message, and cached syntax highlighting keeps it cheap.
+            refreshConversationAfterQuoteValidation(
+              conversationKey,
+              new Set([assistantMessage]),
+            );
+          }
         }
       } finally {
         for (const { assistantMessage, signature } of batch) {
@@ -4293,9 +4341,6 @@ function startConversationQuoteValidation(conversationKey: number): void {
             quoteValidationSignatures.delete(assistantMessage);
           }
         }
-      }
-      if (displayChanged) {
-        refreshConversationAfterQuoteValidation(conversationKey);
       }
     }
   })().catch((error) => {
@@ -5066,12 +5111,7 @@ function createCodexNativeActivityTraceController(
     let coalescer = progressCoalescers.get(itemId);
     if (coalescer) return coalescer;
     const onBlock = (block: string) => {
-      const changed = upsertProgressText(
-        itemId,
-        block,
-        "append",
-        "running",
-      );
+      const changed = upsertProgressText(itemId, block, "append", "running");
       if (changed) sync();
     };
     coalescer = createAssistantResponseStreamCoalescer(onBlock);
@@ -9866,7 +9906,15 @@ export function renderForkSourceMarkerInto(
   bubble.append(leftRule, button, rightRule);
 }
 
-export function refreshChat(body: Element, item?: Zotero.Item | null) {
+export type RefreshChatOptions = {
+  rerenderAssistantMessages?: ReadonlySet<Message>;
+};
+
+export function refreshChat(
+  body: Element,
+  item?: Zotero.Item | null,
+  options: RefreshChatOptions = {},
+) {
   const chatBox = body.querySelector("#llm-chat-box") as HTMLDivElement | null;
   if (!chatBox) return;
   const doc = body.ownerDocument!;
@@ -9916,8 +9964,31 @@ export function refreshChat(body: Element, item?: Zotero.Item | null) {
         ? cachedSnapshot
         : buildChatScrollSnapshot(chatBox);
   const history = chatHistory.get(conversationKey) || [];
+  const requestedRerenders = options.rerenderAssistantMessages;
+  const targetedMessageWrappers = new Map<Message, HTMLElement>();
+  let useTargetedRerender = Boolean(requestedRerenders?.size);
+  if (useTargetedRerender) {
+    const renderedWrappers = Array.from(chatBox.children) as HTMLElement[];
+    for (const message of requestedRerenders || []) {
+      const messageIndex = history.indexOf(message);
+      if (message.role !== "assistant" || messageIndex < 0) {
+        useTargetedRerender = false;
+        break;
+      }
+      const wrapper = renderedWrappers.find(
+        (candidate) =>
+          candidate.dataset.messageRole === "assistant" &&
+          candidate.dataset.messageIndex === `${messageIndex}`,
+      );
+      if (!wrapper) {
+        useTargetedRerender = false;
+        break;
+      }
+      targetedMessageWrappers.set(message, wrapper);
+    }
+  }
   const forkLink = conversationForkLinks.get(conversationKey) || null;
-  if (tokenUsageEl) {
+  if (tokenUsageEl && !useTargetedRerender) {
     const snapshot = contextUsageSnapshots.get(conversationKey);
     const liveSnapshot =
       snapshot && snapshot.source !== "persisted" ? snapshot : undefined;
@@ -9974,7 +10045,9 @@ export function refreshChat(body: Element, item?: Zotero.Item | null) {
       }, 450);
     }
   }
-  chatBox.innerHTML = "";
+  if (!useTargetedRerender) {
+    chatBox.innerHTML = "";
+  }
 
   const latestRetryPair = findLatestRetryPair(history);
   const latestAssistantIndex = latestRetryPair
@@ -9986,6 +10059,9 @@ export function refreshChat(body: Element, item?: Zotero.Item | null) {
   }).providerProtocol;
   const conversationIsIdle = !history.some((m) => m.streaming);
   for (const [index, msg] of history.entries()) {
+    if (useTargetedRerender && !targetedMessageWrappers.has(msg)) {
+      continue;
+    }
     const isUser = msg.role === "user";
     const assistantPairMsg = history[index + 1];
     const hasAssistantPair = isUser && assistantPairMsg?.role === "assistant";
@@ -10005,6 +10081,7 @@ export function refreshChat(body: Element, item?: Zotero.Item | null) {
     const wrapper = doc.createElement("div") as HTMLDivElement;
     wrapper.className = `llm-message-wrapper ${isUser ? "user" : "assistant"}`;
     wrapper.dataset.messageRole = msg.role;
+    wrapper.dataset.messageIndex = `${index}`;
     wrapper.dataset.messageTimestamp = `${Math.floor(
       Number(msg.timestamp) || 0,
     )}`;
@@ -11270,8 +11347,14 @@ export function refreshChat(body: Element, item?: Zotero.Item | null) {
     }
     wrapper.appendChild(meta);
     if (webchatStatusRow) wrapper.appendChild(webchatStatusRow);
-    chatBox.appendChild(wrapper);
+    const existingTargetedWrapper = targetedMessageWrappers.get(msg);
+    if (useTargetedRerender && existingTargetedWrapper) {
+      existingTargetedWrapper.replaceWith(wrapper);
+    } else {
+      chatBox.appendChild(wrapper);
+    }
     if (
+      !useTargetedRerender &&
       forkLink &&
       !isUser &&
       Number(msg.timestamp) === forkLink.targetAnchorAssistantTimestamp

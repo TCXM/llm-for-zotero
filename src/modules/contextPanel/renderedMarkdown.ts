@@ -1744,7 +1744,7 @@ export function normalizeMermaidSourceForTheme(
 function getMermaidSvgPolishCss(themeKey: MermaidThemeKey): string {
   if (themeKey === "dark") {
     return [
-      "svg{background:#151515;color:#f8fafc;color-scheme:dark;}",
+      "svg[data-llm-mermaid-polished]{background:#151515;color:#f8fafc;color-scheme:dark;}",
       ".cluster rect{fill:#171717!important;stroke:#3f3f46!important;}",
       ".cluster text,.cluster span,.cluster .nodeLabel{fill:#f8fafc!important;color:#f8fafc!important;}",
       ".edgeLabel,.edgeLabel p{background-color:#151515!important;color:#f8fafc!important;}",
@@ -1753,7 +1753,7 @@ function getMermaidSvgPolishCss(themeKey: MermaidThemeKey): string {
     ].join("\n");
   }
   return [
-    "svg{background:#ffffff;color:#111827;color-scheme:light;}",
+    "svg[data-llm-mermaid-polished]{background:#ffffff;color:#111827;color-scheme:light;}",
     ".cluster rect{fill:#ffffff!important;stroke:#e5e7eb!important;}",
     ".cluster text,.cluster span,.cluster .nodeLabel{fill:#111827!important;color:#111827!important;}",
     ".edgeLabel,.edgeLabel p{background-color:#ffffff!important;color:#374151!important;}",

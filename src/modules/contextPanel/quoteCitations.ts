@@ -7,8 +7,7 @@ import { isBodyEvidenceSection } from "../../shared/libraryChatEvidencePolicy";
 import { formatPaperSourceLabel } from "./paperAttribution";
 import {
   extractLocatorTokens,
-  findLargestQuoteTextAnchorMatch,
-  findLargestUniqueQuoteTextAnchorMatch,
+  findQuoteTextAnchorMatches,
   normalizeLocatorText,
   splitQuoteAtEllipsisInOrder,
   stripBoundaryEllipsis,
@@ -16,7 +15,9 @@ import {
 } from "./quoteTextSearch";
 import {
   buildQuoteTextIndex,
+  findCanonicalTextMatchStart,
   findQuoteSourceSpansAllowingLayoutArtifacts,
+  findQuoteSourceSpansAllowingLayoutArtifactsFromIndex,
   normalizeQuoteTextCanonical,
   stripLikelyLayoutNumberArtifacts,
   type QuoteTextIndex,
@@ -43,6 +44,17 @@ const MIN_AUTO_TRUSTED_QUOTE_NORMALIZED_CHARS = 36;
 const MIN_AUTO_TRUSTED_QUOTE_TOKENS = 6;
 const MIN_AUTO_TRUSTED_NON_ASCII_QUOTE_CHARS = 16;
 const MIN_COMPLETE_LAYOUT_ARTIFACT_SUPPORT_COVERAGE = 0.7;
+const MIN_NEAR_COMPLETE_QUOTE_SUPPORT_COVERAGE = 0.8;
+const MIN_NEAR_COMPLETE_QUOTE_SUPPORTED_TOKENS = 7;
+const MIN_NEAR_COMPLETE_QUOTE_ANCHOR_TOKENS = 6;
+const MIN_EXTRACTION_SENSITIVE_QUOTE_SUPPORT_COVERAGE = 0.55;
+const MIN_EXTRACTION_SENSITIVE_QUOTE_SUPPORTED_TOKENS = 8;
+const MIN_MATH_INTERLEAVED_QUOTE_SUPPORT_COVERAGE = 0.6;
+const MIN_MATH_INTERLEAVED_QUOTE_SUPPORTED_TOKENS = 12;
+const MIN_CJK_INTERLEAVED_QUOTE_SUPPORT_COVERAGE = 0.65;
+const MIN_CJK_INTERLEAVED_QUOTE_SUPPORTED_TOKENS = 12;
+const MIN_ADJACENT_PAGE_QUOTE_FRAGMENT_TOKENS = 5;
+const MAX_ADJACENT_PAGE_EDGE_GAP_TOKENS = 600;
 const MARKDOWN_IMAGE_PATTERN = /!\[[^\]\n]*\]\([^)\n]+\)/g;
 const COMPLETE_TRAILING_SOURCE_LOCATOR_PATTERN =
   /(\((?:(?:supplementary|supp\.?)\s+)?(?:fig(?:ure)?|table|eq(?:uation)?|appendix)\b[^()\n]{0,120}\)[.!?。！？]+["'”’]?)$/iu;
@@ -432,6 +444,29 @@ function stripBlockquoteMarker(line: string): string {
 
 function isBlockquoteWrappedQuoteCitationLine(line: string): boolean {
   return BLOCKQUOTE_WRAPPED_QUOTE_CITATION_LINE_PATTERN.test(line);
+}
+
+function findAdjacentStandaloneQuoteCitation(params: {
+  markdownLines: string[];
+  followingLineStartIndex: number;
+}): { quoteCitationId: string; lineIndex: number } | null {
+  let lineIndex = params.followingLineStartIndex;
+  while (
+    lineIndex < params.markdownLines.length &&
+    !params.markdownLines[lineIndex].trim()
+  ) {
+    lineIndex += 1;
+  }
+  if (lineIndex >= params.markdownLines.length) return null;
+  const line = params.markdownLines[lineIndex];
+  const candidate = /^[ \t]*>/.test(line) ? stripBlockquoteMarker(line) : line;
+  const match = candidate.match(/^[ \t]*\[\[quote:([A-Za-z0-9_-]+)\]\][ \t]*$/);
+  return match?.[1]
+    ? {
+        quoteCitationId: match[1],
+        lineIndex,
+      }
+    : null;
 }
 
 function unwrapBlockquoteWrappedQuoteCitationPlaceholders(
@@ -1602,6 +1637,7 @@ export function resolveExactDisplayedQuoteCitation(params: {
     occurrenceIndex: number;
     sourceQuoteText: string;
   }> = [];
+  const displayedTextIndex = buildQuoteTextIndex(displayed.quoteText);
 
   for (const source of params.sourceIndex.sources) {
     if (source.requiresPageHint && source.pageHintIndex === undefined) {
@@ -1618,9 +1654,9 @@ export function resolveExactDisplayedQuoteCitation(params: {
     ) {
       continue;
     }
-    const spans = findQuoteSourceSpansAllowingLayoutArtifacts(
+    const spans = findQuoteSourceSpansAllowingLayoutArtifactsFromIndex(
       source.textIndex || buildQuoteTextIndex(source.sourceText),
-      displayed.quoteText,
+      displayedTextIndex,
     );
     for (const span of spans) {
       const sourceQuoteText = normalizeMultilineText(
@@ -1777,11 +1813,234 @@ function splitDisplayedQuoteIntoSentenceSegments(value: string): string[] {
   return segments.map((segment) => segment.trim()).filter(Boolean);
 }
 
+function quoteSourceIdentity(source: QuoteSourceIndexEntry): string {
+  if (source.contextItemId) return `context:${source.contextItemId}`;
+  if (source.sourceFingerprint) {
+    return `fingerprint:${source.sourceFingerprint}`;
+  }
+  if (source.itemId) return `item:${source.itemId}`;
+  return "";
+}
+
+function countQuoteSourceSpanOccurrences(
+  sources: QuoteSourceIndexEntry[],
+  quoteText: string,
+): Array<{
+  source: QuoteSourceIndexEntry;
+  span: ReturnType<typeof findQuoteSourceSpansAllowingLayoutArtifacts>[number];
+}> {
+  const matches: Array<{
+    source: QuoteSourceIndexEntry;
+    span: ReturnType<
+      typeof findQuoteSourceSpansAllowingLayoutArtifacts
+    >[number];
+  }> = [];
+  const quoteTextIndex = buildQuoteTextIndex(quoteText);
+  for (const source of sources) {
+    const spans = findQuoteSourceSpansAllowingLayoutArtifactsFromIndex(
+      source.textIndex || buildQuoteTextIndex(source.sourceText),
+      quoteTextIndex,
+    );
+    for (const span of spans) matches.push({ source, span });
+  }
+  return matches;
+}
+
+function quoteSourceIndexForSinglePage(
+  sourceIndex: QuoteSourceIndex,
+  source: QuoteSourceIndexEntry,
+): QuoteSourceIndex {
+  return {
+    quoteCitations: [],
+    sources: [source],
+    metadataTexts: sourceIndex.metadataTexts,
+  };
+}
+
+function hasLikelyMidSentencePageBoundary(
+  prefix: string,
+  suffix: string,
+): boolean {
+  if (/[.!?。！？]["'”’)]?$/u.test(prefix.trim())) return false;
+  const firstSemanticCharacter = suffix.match(/[\p{L}\p{N}]/u)?.[0] || "";
+  if (!firstSemanticCharacter) return false;
+  if (/^\p{N}$/u.test(firstSemanticCharacter)) return true;
+  const lower = firstSemanticCharacter.toLocaleLowerCase();
+  const upper = firstSemanticCharacter.toLocaleUpperCase();
+  return lower === firstSemanticCharacter || lower === upper;
+}
+
+function isSubstantiveAdjacentPageQuoteFragment(value: string): boolean {
+  const normalized = normalizeLocatorText(value);
+  if (!normalized) return false;
+  return hasNonAsciiText(normalized)
+    ? normalized.length >= MIN_AUTO_TRUSTED_NON_ASCII_QUOTE_CHARS
+    : normalized.length >= MIN_AUTO_TRUSTED_QUOTE_NORMALIZED_CHARS;
+}
+
+/**
+ * Recover a sentence split in the middle by a PDF page boundary. PDF text
+ * extraction can place a header or figure caption before the continuation on
+ * the next page. Each displayed fragment must therefore be independently
+ * unique, close to the appropriate page edge, ordered on adjacent pages, and
+ * from the same attachment. The two fragments together cover every displayed
+ * token; unsupported words can never be skipped by this fallback.
+ */
+function resolveAdjacentPageDisplayedQuoteCitations(params: {
+  quoteText: string;
+  citationLabel?: string;
+  sourceIndex: QuoteSourceIndex;
+  preferredContextItemId?: number;
+  preferredItemId?: number;
+  preferredSourceFingerprint?: string;
+}): QuoteCitation[] {
+  const displayedQuoteText = stripOuterQuoteDelimiters(
+    normalizeMultilineText(params.quoteText),
+  );
+  const displayedIndex = buildQuoteTextIndex(displayedQuoteText);
+  if (
+    displayedIndex.tokens.length <
+    MIN_ADJACENT_PAGE_QUOTE_FRAGMENT_TOKENS * 2
+  ) {
+    return [];
+  }
+
+  const pageSources = filterQuoteAnchorSources({
+    ...params,
+    sourceIndex: params.sourceIndex,
+  })
+    .map(({ source }) => source)
+    .filter(
+      (source) =>
+        source.sourceMatchSource === "pdf-page-text" &&
+        source.pageHintIndex !== undefined &&
+        Boolean(quoteSourceIdentity(source)),
+    );
+  if (pageSources.length < 2) return [];
+
+  const firstRequiredFragmentEnd =
+    displayedIndex.tokens[MIN_ADJACENT_PAGE_QUOTE_FRAGMENT_TOKENS - 1]
+      ?.sourceEnd;
+  const lastRequiredFragmentStart =
+    displayedIndex.tokens[
+      displayedIndex.tokens.length - MIN_ADJACENT_PAGE_QUOTE_FRAGMENT_TOKENS
+    ]?.sourceStart;
+  if (
+    firstRequiredFragmentEnd === undefined ||
+    lastRequiredFragmentStart === undefined
+  ) {
+    return [];
+  }
+  const requiredStartFragment = displayedQuoteText
+    .slice(0, firstRequiredFragmentEnd)
+    .trim();
+  const requiredEndFragment = displayedQuoteText
+    .slice(lastRequiredFragmentStart)
+    .trim();
+  if (!quoteContainsLayoutArtifactHazards(displayedQuoteText)) {
+    if (
+      !countQuoteSourceSpanOccurrences(pageSources, requiredStartFragment)
+        .length ||
+      !countQuoteSourceSpanOccurrences(pageSources, requiredEndFragment).length
+    ) {
+      return [];
+    }
+  }
+
+  const candidates: QuoteCitation[][] = [];
+  for (
+    let splitIndex = MIN_ADJACENT_PAGE_QUOTE_FRAGMENT_TOKENS;
+    splitIndex <=
+    displayedIndex.tokens.length - MIN_ADJACENT_PAGE_QUOTE_FRAGMENT_TOKENS;
+    splitIndex += 1
+  ) {
+    const previousToken = displayedIndex.tokens[splitIndex - 1];
+    const nextToken = displayedIndex.tokens[splitIndex];
+    if (!previousToken || !nextToken) continue;
+    const displayedGap = displayedQuoteText.slice(
+      previousToken.sourceEnd,
+      nextToken.sourceStart,
+    );
+    if (!/^[\s,;:，；：–—-]+$/u.test(displayedGap)) continue;
+
+    const prefix = displayedQuoteText.slice(0, nextToken.sourceStart).trim();
+    const suffix = displayedQuoteText.slice(nextToken.sourceStart).trim();
+    if (
+      !isSubstantiveAdjacentPageQuoteFragment(prefix) ||
+      !isSubstantiveAdjacentPageQuoteFragment(suffix) ||
+      !hasLikelyMidSentencePageBoundary(prefix, suffix)
+    ) {
+      continue;
+    }
+
+    const prefixIsMoreSelective =
+      splitIndex >= displayedIndex.tokens.length - splitIndex;
+    const firstMatches = countQuoteSourceSpanOccurrences(
+      pageSources,
+      prefixIsMoreSelective ? prefix : suffix,
+    );
+    if (firstMatches.length !== 1) continue;
+    const secondMatches = countQuoteSourceSpanOccurrences(
+      pageSources,
+      prefixIsMoreSelective ? suffix : prefix,
+    );
+    if (secondMatches.length !== 1) continue;
+    const prefixMatches = prefixIsMoreSelective ? firstMatches : secondMatches;
+    const suffixMatches = prefixIsMoreSelective ? secondMatches : firstMatches;
+    const leftSource = prefixMatches[0].source;
+    const rightSource = suffixMatches[0].source;
+    const leftIdentity = quoteSourceIdentity(leftSource);
+    if (
+      !leftIdentity ||
+      leftIdentity !== quoteSourceIdentity(rightSource) ||
+      Number(rightSource.pageHintIndex) !== Number(leftSource.pageHintIndex) + 1
+    ) {
+      continue;
+    }
+
+    const leftTrailingTokens = buildQuoteTextIndex(
+      leftSource.sourceText.slice(prefixMatches[0].span.sourceEnd),
+    ).tokens.length;
+    const rightLeadingTokens = buildQuoteTextIndex(
+      rightSource.sourceText.slice(0, suffixMatches[0].span.sourceStart),
+    ).tokens.length;
+    if (
+      leftTrailingTokens > MAX_ADJACENT_PAGE_EDGE_GAP_TOKENS ||
+      rightLeadingTokens > MAX_ADJACENT_PAGE_EDGE_GAP_TOKENS
+    ) {
+      continue;
+    }
+
+    const prefixCitation = resolveExactDisplayedQuoteCitation({
+      ...params,
+      preferredId: undefined,
+      quoteText: prefix,
+      sourceIndex: quoteSourceIndexForSinglePage(
+        params.sourceIndex,
+        leftSource,
+      ),
+    });
+    const suffixCitation = resolveExactDisplayedQuoteCitation({
+      ...params,
+      preferredId: undefined,
+      quoteText: suffix,
+      sourceIndex: quoteSourceIndexForSinglePage(
+        params.sourceIndex,
+        rightSource,
+      ),
+    });
+    if (!prefixCitation || !suffixCitation) continue;
+    candidates.push([prefixCitation, suffixCitation]);
+  }
+
+  return candidates.length === 1 ? candidates[0] : [];
+}
+
 /**
  * Resolve one visible quote into one or more complete, page-bounded source
  * spans. Ellipsized quotes are split at the omitted text. Quotes that
- * genuinely cross a page boundary are split at sentence boundaries only
- * after every sentence can be grounded and at least two pages are involved.
+ * genuinely cross a page boundary are split only after every displayed token
+ * can be grounded in ordered, page-bounded spans.
  */
 export function resolvePageBoundedDisplayedQuoteCitations(params: {
   quoteText: string;
@@ -1818,34 +2077,39 @@ export function resolvePageBoundedDisplayedQuoteCitations(params: {
   const sentenceSegments = splitDisplayedQuoteIntoSentenceSegments(
     quoteWithoutDelimiters,
   );
-  if (sentenceSegments.length < 2) return [];
-  const resolved = sentenceSegments.map((quoteText) =>
-    resolveExactDisplayedQuoteCitation({
-      ...params,
-      preferredId: undefined,
-      quoteText,
-    }),
-  );
-  if (
-    !resolved.every((citation): citation is QuoteCitation =>
-      Boolean(citation && citation.pageHintIndex !== undefined),
-    )
-  ) {
-    return [];
-  }
-  const pageIndexes = new Set(
-    resolved.map((citation) => citation.pageHintIndex),
-  );
-  if (pageIndexes.size < 2) return [];
-  for (let index = 1; index < resolved.length; index += 1) {
+  if (sentenceSegments.length >= 2) {
+    const resolved = sentenceSegments.map((quoteText) =>
+      resolveExactDisplayedQuoteCitation({
+        ...params,
+        preferredId: undefined,
+        quoteText,
+      }),
+    );
     if (
-      Number(resolved[index].pageHintIndex) <
-      Number(resolved[index - 1].pageHintIndex)
+      resolved.every((citation): citation is QuoteCitation =>
+        Boolean(citation && citation.pageHintIndex !== undefined),
+      )
     ) {
-      return [];
+      const pageIndexes = new Set(
+        resolved.map((citation) => citation.pageHintIndex),
+      );
+      let pagesAreOrdered = pageIndexes.size >= 2;
+      for (let index = 1; index < resolved.length; index += 1) {
+        if (
+          Number(resolved[index].pageHintIndex) <
+          Number(resolved[index - 1].pageHintIndex)
+        ) {
+          pagesAreOrdered = false;
+          break;
+        }
+      }
+      if (pagesAreOrdered) return resolved;
     }
   }
-  return resolved;
+  return resolveAdjacentPageDisplayedQuoteCitations({
+    ...params,
+    quoteText: quoteWithoutDelimiters,
+  });
 }
 
 function quoteContainsLayoutArtifactHazards(value: string): boolean {
@@ -1854,14 +2118,29 @@ function quoteContainsLayoutArtifactHazards(value: string): boolean {
   if (splitQuoteAtEllipsisInOrder(stripOuterQuoteDelimiters(text)).length > 1) {
     return true;
   }
-  if (
-    /(?:\\\(|\\\)|\\\[|\\\]|\${1,2}|\\[A-Za-z]+|\u00ad|\u2061)/u.test(text) ||
-    /[\p{Sm}\p{Sk}\u0370-\u03ff\u1f00-\u1fff]/u.test(text)
-  ) {
-    return true;
-  }
+  if (quoteContainsExplicitMathMarkup(text)) return true;
   const semanticNonAscii = text.replace(/[\p{P}\p{Z}\p{N}]/gu, "");
   return /[^\x00-\x7f]/u.test(semanticNonAscii);
+}
+
+function quoteContainsExplicitMathMarkup(value: string): boolean {
+  return (
+    /(?:\\\(|\\\)|\\\[|\\\]|\${1,2}|\\[A-Za-z]+|\u00ad|\u2061)/u.test(value) ||
+    /[\p{Sm}\p{Sk}\u0370-\u03ff\u1f00-\u1fff]/u.test(value)
+  );
+}
+
+function isMathDominatedDisplayedQuote(value: string): boolean {
+  if (!quoteContainsExplicitMathMarkup(value)) return false;
+  const withoutDelimitedMath = value
+    .replace(/\$\$[\s\S]*?\$\$/gu, " ")
+    .replace(/\$[^$\n]*\$/gu, " ")
+    .replace(/\\\([\s\S]*?\\\)/gu, " ")
+    .replace(/\\\[[\s\S]*?\\\]/gu, " ");
+  const proseTokens = extractLocatorTokens(withoutDelimitedMath).filter(
+    (token) => /^\p{L}{3,}$/u.test(token),
+  );
+  return proseTokens.length < MIN_AUTO_TRUSTED_QUOTE_TOKENS;
 }
 
 /**
@@ -1880,6 +2159,79 @@ function hasCompleteDisplayedQuoteSupport(
     match.quoteEndTokenSupported &&
     match.quoteTokenSupportCoverage >=
       MIN_COMPLETE_LAYOUT_ARTIFACT_SUPPORT_COVERAGE
+  );
+}
+
+/**
+ * A strong partial anchor is negative evidence against an absence decision,
+ * not permission to authenticate the quote. Preserve the unresolved display
+ * while localized full-span reconstruction is incomplete.
+ */
+function hasNearCompleteDisplayedQuoteSupport(
+  match: QuoteTextAnchorMatch,
+  quoteText: string,
+): boolean {
+  const hasUnresolvedEllipsis =
+    splitQuoteAtEllipsisInOrder(stripOuterQuoteDelimiters(quoteText)).length >
+      1 && match.quoteTokenSupportCoverage < 1;
+  return (
+    !hasUnresolvedEllipsis &&
+    match.confidence === "high" &&
+    match.totalOccurrences === 1 &&
+    match.matchedEntryIds.length === 1 &&
+    match.matchedTokenCount >= MIN_NEAR_COMPLETE_QUOTE_ANCHOR_TOKENS &&
+    match.supportedQuoteTokenCount >=
+      MIN_NEAR_COMPLETE_QUOTE_SUPPORTED_TOKENS &&
+    match.quoteTokenSupportCoverage >=
+      MIN_NEAR_COMPLETE_QUOTE_SUPPORT_COVERAGE &&
+    (match.quoteStartTokenSupported || match.quoteEndTokenSupported)
+  );
+}
+
+function hasExtractionSensitiveDisplayedQuoteSupport(
+  match: QuoteTextAnchorMatch,
+  quoteText: string,
+): boolean {
+  const hasUnresolvedEllipsis =
+    splitQuoteAtEllipsisInOrder(stripOuterQuoteDelimiters(quoteText)).length >
+      1 && match.quoteTokenSupportCoverage < 1;
+  const commonSupport =
+    !hasUnresolvedEllipsis &&
+    quoteContainsLayoutArtifactHazards(quoteText) &&
+    match.confidence === "high" &&
+    match.totalOccurrences === 1 &&
+    match.matchedEntryIds.length === 1 &&
+    match.matchedTokenCount >= MIN_NEAR_COMPLETE_QUOTE_ANCHOR_TOKENS &&
+    match.supportedQuoteTokenCount >=
+      MIN_EXTRACTION_SENSITIVE_QUOTE_SUPPORTED_TOKENS;
+  if (!commonSupport) return false;
+  const hasBoundarySupportedPartial =
+    match.quoteTokenSupportCoverage >=
+      MIN_EXTRACTION_SENSITIVE_QUOTE_SUPPORT_COVERAGE &&
+    (match.quoteStartTokenSupported || match.quoteEndTokenSupported);
+  const hasInterleavedMathSupport =
+    quoteContainsExplicitMathMarkup(quoteText) &&
+    match.supportedQuoteTokenCount >=
+      MIN_MATH_INTERLEAVED_QUOTE_SUPPORTED_TOKENS &&
+    match.quoteTokenSupportCoverage >=
+      MIN_MATH_INTERLEAVED_QUOTE_SUPPORT_COVERAGE;
+  return hasBoundarySupportedPartial || hasInterleavedMathSupport;
+}
+
+function hasCjkInterleavedDisplayedQuoteSupport(
+  match: QuoteTextAnchorMatch,
+  quoteText: string,
+): boolean {
+  return (
+    /[\u3400-\u4dbf\u4e00-\u9fff]/u.test(quoteText) &&
+    match.confidence === "high" &&
+    match.totalOccurrences === 1 &&
+    match.matchedEntryIds.length === 1 &&
+    match.matchedTokenCount >= MIN_NEAR_COMPLETE_QUOTE_ANCHOR_TOKENS &&
+    match.supportedQuoteTokenCount >=
+      MIN_CJK_INTERLEAVED_QUOTE_SUPPORTED_TOKENS &&
+    match.quoteTokenSupportCoverage >=
+      MIN_CJK_INTERLEAVED_QUOTE_SUPPORT_COVERAGE
   );
 }
 
@@ -1923,6 +2275,107 @@ function filterQuoteAnchorSources(params: {
   return sources;
 }
 
+type DisplayedQuoteAnchorMatchCacheEntry = {
+  matches: QuoteTextAnchorMatch[];
+  estimatedBytes: number;
+};
+
+type DisplayedQuoteAnchorMatchCache = {
+  entries: Map<string, DisplayedQuoteAnchorMatchCacheEntry>;
+  estimatedBytes: number;
+};
+
+const displayedQuoteAnchorMatchCache = new WeakMap<
+  QuoteSourceIndex,
+  DisplayedQuoteAnchorMatchCache
+>();
+const MAX_DISPLAYED_QUOTE_ANCHOR_CACHE_ENTRIES = 256;
+// This is per source index. The caller retains at most 64 source indexes, so
+// anchor-match payloads remain bounded to roughly 4 MiB in aggregate.
+export const DISPLAYED_QUOTE_ANCHOR_CACHE_MAX_BYTES = 64 * 1024;
+const DISPLAYED_QUOTE_ANCHOR_CACHE_ENTRY_OVERHEAD_BYTES = 128;
+
+function estimateDisplayedQuoteAnchorCacheEntryBytes(
+  cacheKey: string,
+  matches: QuoteTextAnchorMatch[],
+): number {
+  try {
+    return (
+      DISPLAYED_QUOTE_ANCHOR_CACHE_ENTRY_OVERHEAD_BYTES +
+      2 * (cacheKey.length + JSON.stringify(matches).length)
+    );
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function getOrCreateDisplayedQuoteAnchorMatchCache(
+  sourceIndex: QuoteSourceIndex,
+): DisplayedQuoteAnchorMatchCache {
+  let cache = displayedQuoteAnchorMatchCache.get(sourceIndex);
+  if (!cache) {
+    cache = {
+      entries: new Map(),
+      estimatedBytes: 0,
+    };
+    displayedQuoteAnchorMatchCache.set(sourceIndex, cache);
+  }
+  return cache;
+}
+
+function cacheDisplayedQuoteAnchorMatches(
+  sourceIndex: QuoteSourceIndex,
+  cacheKey: string,
+  matches: QuoteTextAnchorMatch[],
+): void {
+  const estimatedBytes = estimateDisplayedQuoteAnchorCacheEntryBytes(
+    cacheKey,
+    matches,
+  );
+  if (estimatedBytes > DISPLAYED_QUOTE_ANCHOR_CACHE_MAX_BYTES) return;
+
+  const cache = getOrCreateDisplayedQuoteAnchorMatchCache(sourceIndex);
+  const existing = cache.entries.get(cacheKey);
+  if (existing) {
+    cache.entries.delete(cacheKey);
+    cache.estimatedBytes -= existing.estimatedBytes;
+  }
+  cache.entries.set(cacheKey, { matches, estimatedBytes });
+  cache.estimatedBytes += estimatedBytes;
+
+  while (
+    cache.entries.size > MAX_DISPLAYED_QUOTE_ANCHOR_CACHE_ENTRIES ||
+    cache.estimatedBytes > DISPLAYED_QUOTE_ANCHOR_CACHE_MAX_BYTES
+  ) {
+    const oldestKey = cache.entries.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    const oldest = cache.entries.get(oldestKey);
+    cache.entries.delete(oldestKey);
+    cache.estimatedBytes = Math.max(
+      0,
+      cache.estimatedBytes - (oldest?.estimatedBytes || 0),
+    );
+  }
+}
+
+export function __cacheDisplayedQuoteAnchorMatchesForTest(
+  sourceIndex: QuoteSourceIndex,
+  cacheKey: string,
+  matches: QuoteTextAnchorMatch[],
+): void {
+  cacheDisplayedQuoteAnchorMatches(sourceIndex, cacheKey, matches);
+}
+
+export function __getDisplayedQuoteAnchorMatchCacheStatsForTest(
+  sourceIndex: QuoteSourceIndex,
+): { entries: number; estimatedBytes: number } {
+  const cache = displayedQuoteAnchorMatchCache.get(sourceIndex);
+  return {
+    entries: cache?.entries.size || 0,
+    estimatedBytes: cache?.estimatedBytes || 0,
+  };
+}
+
 function findDisplayedQuoteAnchorMatch(params: {
   quoteText: string;
   citationLabel?: string;
@@ -1943,19 +2396,64 @@ function findDisplayedQuoteAnchorMatch(params: {
     textIndex: source.textIndex,
     debugLabel: source.citationLabel,
   }));
+  const cacheKey = [
+    params.quoteText,
+    params.citationLabel || "",
+    params.preferredContextItemId || "",
+    params.preferredItemId || "",
+    params.preferredSourceFingerprint || "",
+  ].join("\u241f");
+  const sourceCache = getOrCreateDisplayedQuoteAnchorMatchCache(
+    params.sourceIndex,
+  );
+  const cached = sourceCache.entries.get(cacheKey);
+  let matches: QuoteTextAnchorMatch[];
+  if (cached) {
+    matches = cached.matches;
+    sourceCache.entries.delete(cacheKey);
+    sourceCache.entries.set(cacheKey, cached);
+  } else {
+    matches = findQuoteTextAnchorMatches(entries, params.quoteText, {
+      minQueryLength: 20,
+      rejectWeakQueries: true,
+    });
+    cacheDisplayedQuoteAnchorMatches(params.sourceIndex, cacheKey, matches);
+  }
   const match = params.requireUnique
-    ? findLargestUniqueQuoteTextAnchorMatch(entries, params.quoteText, {
-        minQueryLength: 20,
-        rejectWeakQueries: true,
-      })
-    : findLargestQuoteTextAnchorMatch(entries, params.quoteText, {
-        minQueryLength: 20,
-        rejectWeakQueries: true,
-      });
+    ? matches.find(
+        (candidate) =>
+          candidate.totalOccurrences === 1 &&
+          candidate.matchedEntryIds.length === 1,
+      ) || null
+    : matches[0] || null;
   if (!match) return null;
   const matchedOrdinal = Number(match.entryId.replace(/^source-/, ""));
   const source = params.sourceIndex.sources[matchedOrdinal];
   return source ? { match, source } : null;
+}
+
+function hasAllDisplayedEllipsisSegmentsSupported(params: {
+  quoteText: string;
+  sourceIndex: QuoteSourceIndex;
+}): boolean {
+  const segments = splitQuoteAtEllipsisInOrder(
+    stripOuterQuoteDelimiters(params.quoteText),
+  );
+  if (segments.length < 2) return false;
+  return segments.every((quoteText) => {
+    const resolved = findDisplayedQuoteAnchorMatch({
+      quoteText,
+      sourceIndex: params.sourceIndex,
+      requireUnique: true,
+    });
+    if (!resolved) return false;
+    return (
+      hasCompleteDisplayedQuoteSupport(resolved.match, quoteText) ||
+      hasNearCompleteDisplayedQuoteSupport(resolved.match, quoteText) ||
+      hasExtractionSensitiveDisplayedQuoteSupport(resolved.match, quoteText) ||
+      hasCjkInterleavedDisplayedQuoteSupport(resolved.match, quoteText)
+    );
+  });
 }
 
 function resolveUniqueDisplayedQuoteAnchorCitation(params: {
@@ -2115,8 +2613,21 @@ function hasCompleteDisplayedQuoteSourceMatch(params: {
     requireUnique: false,
   });
   return Boolean(
-    resolved &&
-    hasCompleteDisplayedQuoteSupport(resolved.match, params.quoteText),
+    (resolved &&
+      (hasCompleteDisplayedQuoteSupport(resolved.match, params.quoteText) ||
+        hasNearCompleteDisplayedQuoteSupport(
+          resolved.match,
+          params.quoteText,
+        ) ||
+        hasExtractionSensitiveDisplayedQuoteSupport(
+          resolved.match,
+          params.quoteText,
+        ) ||
+        hasCjkInterleavedDisplayedQuoteSupport(
+          resolved.match,
+          params.quoteText,
+        ))) ||
+    hasAllDisplayedEllipsisSegmentsSupported(params),
   );
 }
 
@@ -2127,6 +2638,7 @@ function isHighConfidenceNonSourceQuote(params: {
 }): boolean {
   if (!params.sourceEvidenceComplete) return false;
   if (isObviousNonSourceBlockquoteText(params.quoteText)) return true;
+  if (isMathDominatedDisplayedQuote(params.quoteText)) return false;
   return !hasCompleteDisplayedQuoteSourceMatch({
     quoteText: params.quoteText,
     sourceIndex: params.sourceIndex,
@@ -2474,6 +2986,95 @@ function collapseAdjacentDuplicateQuoteCitationPlaceholders(
   return result;
 }
 
+function quoteCitationSharesSourceIdentity(
+  left: QuoteCitation,
+  right: QuoteCitation,
+): boolean {
+  const leftContextItemId = normalizePositiveInt(left.contextItemId);
+  const rightContextItemId = normalizePositiveInt(right.contextItemId);
+  if (leftContextItemId && rightContextItemId) {
+    const leftItemId = normalizePositiveInt(left.itemId);
+    const rightItemId = normalizePositiveInt(right.itemId);
+    return (
+      leftContextItemId === rightContextItemId &&
+      (!leftItemId || !rightItemId || leftItemId === rightItemId)
+    );
+  }
+
+  const leftItemId = normalizePositiveInt(left.itemId);
+  const rightItemId = normalizePositiveInt(right.itemId);
+  if (leftItemId && rightItemId) {
+    return leftItemId === rightItemId;
+  }
+
+  const leftFingerprint = normalizeText(left.sourceFingerprint);
+  const rightFingerprint = normalizeText(right.sourceFingerprint);
+  return Boolean(
+    leftFingerprint && rightFingerprint && leftFingerprint === rightFingerprint,
+  );
+}
+
+function resolveAdjacentManualQuoteAnchor(params: {
+  quoteText: string;
+  quoteCitationId: string;
+  quoteCitations: QuoteCitation[];
+  sourceIndex: QuoteSourceIndex;
+}): QuoteCitation[] {
+  const existingCitation = params.quoteCitations.find(
+    (citation) => citation.id === params.quoteCitationId,
+  );
+  if (!existingCitation || !isVerifiedQuoteCitation(existingCitation)) {
+    return [];
+  }
+
+  const displayedQuote = normalizeQuoteTextCanonical(
+    stripOuterQuoteDelimiters(params.quoteText),
+  );
+  const anchoredQuote = normalizeQuoteTextCanonical(
+    stripOuterQuoteDelimiters(
+      existingCitation.displayQuoteText || existingCitation.quoteText,
+    ),
+  );
+  if (
+    !displayedQuote ||
+    !anchoredQuote ||
+    findCanonicalTextMatchStart(displayedQuote, anchoredQuote) < 0
+  ) {
+    return [];
+  }
+
+  const resolutionParams = {
+    quoteText: params.quoteText,
+    citationLabel: existingCitation.citationLabel,
+    sourceIndex: params.sourceIndex,
+    preferredContextItemId: existingCitation.contextItemId,
+    preferredItemId: existingCitation.itemId,
+  };
+  let reboundCitations = resolveDisplayedQuoteCitations({
+    ...resolutionParams,
+    preferredSourceFingerprint: existingCitation.sourceFingerprint,
+  });
+  if (
+    !reboundCitations.length &&
+    (normalizePositiveInt(existingCitation.contextItemId) ||
+      normalizePositiveInt(existingCitation.itemId))
+  ) {
+    // A historical anchor can carry a MinerU fingerprint while the current
+    // authoritative evidence comes from PDF.js page text (or vice versa).
+    // Retry within the same stable Zotero item scope, then independently
+    // require the complete displayed quote and source identity below.
+    reboundCitations = resolveDisplayedQuoteCitations(resolutionParams);
+  }
+  return reboundCitations.length &&
+    reboundCitations.every(
+      (citation) =>
+        isVerifiedQuoteCitation(citation) &&
+        quoteCitationSharesSourceIdentity(existingCitation, citation),
+    )
+    ? reboundCitations
+    : [];
+}
+
 function cleanupEmptyCitationParentheticals(markdown: string): string {
   if (!markdown) return markdown;
   return markdown
@@ -2672,6 +3273,31 @@ function* finalizeAssistantQuoteCitationSteps(
     });
     let quoteText = candidate.quoteText;
     let citationLabel = candidate.citationLabel;
+    const adjacentQuoteCitation = findAdjacentStandaloneQuoteCitation({
+      markdownLines: lines,
+      followingLineStartIndex: index,
+    });
+    const adjacentReboundCitations = adjacentQuoteCitation
+      ? resolveAdjacentManualQuoteAnchor({
+          quoteText: candidate.trailingCitation?.quoteText || quoteText,
+          quoteCitationId: adjacentQuoteCitation.quoteCitationId,
+          quoteCitations,
+          sourceIndex: finalizedSourceIndex,
+        })
+      : [];
+    if (adjacentQuoteCitation && adjacentReboundCitations.length) {
+      quoteCitations = mergeQuoteCitations(
+        quoteCitations,
+        adjacentReboundCitations,
+      );
+      out.push(
+        ...adjacentReboundCitations.map(
+          (citation) => `[[quote:${citation.id}]]`,
+        ),
+      );
+      index = adjacentQuoteCitation.lineIndex;
+      continue;
+    }
     if (candidate.trailingCitation) {
       if (params.quoteSourceReview) {
         const fullQuote = finalizeQuoteSourceCandidate({
@@ -2680,18 +3306,14 @@ function* finalizeAssistantQuoteCitationSteps(
           sourceEvidenceComplete:
             params.quoteSourceReview.sourceEvidenceComplete,
         });
-        if (fullQuote.kind !== "absent") {
+        if (fullQuote.kind === "matched") {
           if (fullQuote.quoteCitations?.length) {
             quoteCitations = mergeQuoteCitations(
               quoteCitations,
               fullQuote.quoteCitations,
             );
           }
-          if (fullQuote.kind === "defer") {
-            out.push(...lines.slice(blockStart, index));
-          } else if (fullQuote.markdown) {
-            out.push(fullQuote.markdown);
-          }
+          if (fullQuote.markdown) out.push(fullQuote.markdown);
           index -= 1;
           continue;
         }

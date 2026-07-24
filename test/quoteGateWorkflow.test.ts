@@ -189,6 +189,80 @@ describe("minimal source-match quote gate workflow", function () {
     );
   });
 
+  it("repairs a historical manual-anchor pair on load without rewriting raw history", async function () {
+    const anchorQuote =
+      "To describe the probabilistic response of an entire population, we need to make assumptions about the joint responses of neurons.";
+    const displayedQuote = `${anchorQuote} The simplest assumption is that all neurons respond independently from each other.`;
+    const raw = `> ${displayedQuote}\n> [[quote:Q_07qwnp0]]`;
+    const citation = buildQuoteCitation({
+      id: "Q_07qwnp0",
+      quoteText: anchorQuote,
+      citationLabel: "(Ma, 2009)",
+      sourceMatchText: anchorQuote,
+      sourceMatchKind: "exact",
+      sourceMatchSource: "context-text",
+      contextItemId,
+      itemId: paper.itemId,
+      sourceFingerprint: "fnv1a32-historical-mineru",
+    });
+    assert.isDefined(citation);
+    const source = installPdfSource(
+      contextItemId,
+      `${displayedQuote} Then, the population response distribution is the product of the response distributions of the neurons in the population.`,
+    );
+    restoreSource = source.restore;
+    const userMessage: Message = {
+      role: "user",
+      text: "What exactly is the joint probability distribution here?",
+      timestamp: 1,
+      paperContexts: [
+        {
+          ...paper,
+          title: "Population Codes: Theoretic Aspects",
+          firstCreator: "Ma",
+          year: "2009",
+        },
+      ],
+    };
+    const assistantMessage: Message = {
+      role: "assistant",
+      text: raw,
+      quoteCitations: [citation!],
+      timestamp: 2,
+    };
+    chatHistory.set(conversationKey, [userMessage, assistantMessage]);
+
+    finalizeAssistantMessageQuoteCitationsForTests(assistantMessage, {
+      pairedUserMessage: userMessage,
+      conversationKey,
+    });
+    await waitForAssistantQuoteValidationForTests(conversationKey);
+
+    assert.equal(assistantMessage.text, raw);
+    assert.deepEqual(assistantMessage.quoteCitations, [citation!]);
+    assert.equal(
+      (
+        assistantMessage.quoteDisplayOverride?.markdown.match(
+          /\[\[quote:Q_[a-z0-9]+\]\]/g,
+        ) || []
+      ).length,
+      1,
+    );
+    assert.lengthOf(
+      assistantMessage.quoteDisplayOverride?.quoteCitations || [],
+      1,
+    );
+    assert.equal(
+      assistantMessage.quoteDisplayOverride?.quoteCitations?.[0]?.quoteText,
+      displayedQuote,
+    );
+    assert.notEqual(
+      assistantMessage.quoteDisplayOverride?.quoteCitations?.[0]
+        ?.sourceFingerprint,
+      citation!.sourceFingerprint,
+    );
+  });
+
   it("keeps the searchable Asabuki page-4 quote verified after background authentication", async function () {
     const quote =
       "For excitatory synapses, errors between excitatory drive and the output of the cell provide feedback to the synapses... All excitatory connections seek to minimize these errors. For inhibitory synapses, the error between excitatory and inhibitory drive must be minimized to maintain excitation–inhibition balance.";
@@ -302,6 +376,64 @@ describe("minimal source-match quote gate workflow", function () {
     assert.equal(
       assistantMessage.quoteDisplayOverride?.quoteCitations?.[0]?.citationLabel,
       "(Climer et al., 2025)",
+    );
+  });
+
+  it("revalidates the stored Kriegeskorte and Wei quote through fused references without rewriting history", async function () {
+    const quote =
+      "the noise correlation for a pair of neurons is proportional to the product of the derivatives of their tuning curves at the stimulus value. As information already missing from the input cannot possibly be recovered from the code, such so-called differential noise correlations limit the FI that the code can achieve, no matter how many neurons we allow.";
+    const raw = `> ${quote}\n\n(Kriegeskorte & Wei, 2021, page 7)`;
+    const sourceText = [
+      "There is some evidence that related effects are present in frontal cortex194,195.",
+      "In this scenario, the noise correlation for a pair of neurons is proportional to the product of the derivatives of their tuning curves at the stimulus value.",
+      "As information already missing from the input cannot possibly be recovered from the code, such so-called differential noise correlations limit the FI that the code can achieve, no matter how many neurons we allow135.",
+    ].join(" ");
+    const kriegeskortePaper: PaperContextRef = {
+      ...paper,
+      itemId: 4,
+      contextItemId,
+      title: "Neural tuning and representational geometry",
+      firstCreator: "Kriegeskorte and Wei",
+      year: "2021",
+    };
+    const source = installPdfSource(contextItemId, sourceText);
+    restoreSource = source.restore;
+    const userMessage: Message = {
+      role: "user",
+      text: "Explain differential noise correlations.",
+      timestamp: 1,
+      paperContexts: [kriegeskortePaper],
+    };
+    const assistantMessage: Message = {
+      role: "assistant",
+      text: raw,
+      timestamp: 2,
+    };
+    chatHistory.set(conversationKey, [userMessage, assistantMessage]);
+
+    finalizeAssistantMessageQuoteCitationsForTests(assistantMessage, {
+      pairedUserMessage: userMessage,
+      conversationKey,
+    });
+    await waitForAssistantQuoteValidationForTests(conversationKey);
+
+    assert.equal(assistantMessage.text, raw);
+    assert.isUndefined(assistantMessage.quoteCitations);
+    assert.match(
+      assistantMessage.quoteDisplayOverride?.markdown || "",
+      /\[\[quote:Q_[a-z0-9]+\]\]/,
+    );
+    assert.notInclude(
+      assistantMessage.quoteDisplayOverride?.markdown || "",
+      "Not a source quote",
+    );
+    assert.lengthOf(
+      assistantMessage.quoteDisplayOverride?.quoteCitations || [],
+      1,
+    );
+    assert.equal(
+      assistantMessage.quoteDisplayOverride?.quoteCitations?.[0]?.citationLabel,
+      "(Kriegeskorte and Wei, 2021)",
     );
   });
 
