@@ -16,3 +16,15 @@ Zotero's current text color. Licensed under the project's MIT license.
 `claude-code.svg` uses the Claude symbol sourced from
 [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Claude_AI_symbol.svg),
 where it is attributed to Anthropic and released under CC0 1.0.
+
+`action-history-clock.svg` is adapted from Lucide's
+[`history`](https://github.com/lucide-icons/lucide/blob/main/icons/history.svg)
+icon. Its stroke width was adjusted to match Zotero's 20 px toolbar icons.
+Lucide is licensed under the ISC license.
+
+`action-history-new.svg` is adapted from Lucide's
+[`square-pen`](https://github.com/lucide-icons/lucide/blob/main/icons/square-pen.svg)
+icon. Only its stroke width was adjusted to match Zotero's 20 px toolbar icons.
+
+`action-settings.svg` is Zotero's native `20/universal/cog.svg` asset, reused
+so the settings control matches Zotero's toolbar geometry and optical weight.

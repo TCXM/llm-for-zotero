@@ -145,7 +145,11 @@ describe("reader dedicated AI pane", function () {
     );
     assert.match(
       styles,
-      /\.llm-modern-chat-pane \.llm-header button \{[\s\S]*?height: 28px;[\s\S]*?border-radius: 5px;[\s\S]*?color: var\(--fill-secondary\);/,
+      /\.llm-modern-chat-pane \.llm-header button \{[\s\S]*?height: 28px;[\s\S]*?margin: 0 !important;[\s\S]*?border-radius: 5px;[\s\S]*?color: var\(--fill-secondary\);/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-history-new,[\s\S]*?\.llm-modern-chat-pane \.llm-history-toggle \{[\s\S]*?width: 28px;[\s\S]*?flex: 0 0 28px;/,
     );
     assert.include(styles, "background: var(--fill-quinary);");
     assert.include(styles, "background: var(--fill-quarternary);");
@@ -156,7 +160,7 @@ describe("reader dedicated AI pane", function () {
     );
     assert.match(
       styles,
-      /\.llm-modern-chat-pane \.llm-header \{[\s\S]*?padding: 0 8px;/,
+      /\.llm-modern-chat-pane \.llm-header \{[\s\S]*?padding: 0 6px;/,
     );
     assert.match(
       styles,
@@ -164,11 +168,23 @@ describe("reader dedicated AI pane", function () {
     );
     assert.match(
       styles,
-      /\.llm-modern-chat-pane \.llm-runtime-system-controls \{[\s\S]*?gap: 3px;[\s\S]*?width: 28px;/,
+      /\.llm-modern-chat-pane \{[\s\S]*?--llm-toolbar-control-gap: 4px;/,
     );
     assert.match(
       styles,
-      /\.llm-modern-chat-pane \.llm-header-actions \{[\s\S]*?gap: 9px;/,
+      /\.llm-modern-chat-pane \.llm-runtime-system-controls \{[\s\S]*?gap: var\(--llm-toolbar-control-gap\);[\s\S]*?width: 28px;/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-history-bar \{[\s\S]*?gap: var\(--llm-toolbar-control-gap\);/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-header-runtime-controls \{[\s\S]*?gap: var\(--llm-toolbar-control-gap\);/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-header-actions \{[\s\S]*?gap: var\(--llm-toolbar-control-gap\);/,
     );
     assert.match(
       styles,
@@ -203,7 +219,11 @@ describe("reader dedicated AI pane", function () {
     );
     assert.match(
       styles,
-      /\.llm-modern-chat-pane \.llm-actions-left \{[\s\S]*?gap: 4px;/,
+      /\.llm-modern-chat-pane \.llm-actions-left \{[\s\S]*?gap: var\(--llm-toolbar-control-gap\);/,
+    );
+    assert.match(
+      styles,
+      /\.llm-modern-chat-pane \.llm-actions \.llm-upload-file-btn::before,[\s\S]*?\.llm-screenshot-btn\.llm-action-icon-only::before \{[\s\S]*?width: 22px;[\s\S]*?height: 22px;/,
     );
     assert.match(
       styles,
@@ -310,10 +330,7 @@ describe("reader dedicated AI pane", function () {
       "composerDock.append(shortcutsRow, inputSection, statusBar)",
     );
     assert.include(styles, ".llm-modern-chat-pane .llm-reader-composer-dock");
-    assert.include(
-      styles,
-      "#llm-runtime-mode-toggle.llm-runtime-mode-static",
-    );
+    assert.include(styles, "#llm-runtime-mode-toggle.llm-runtime-mode-static");
     assert.include(
       actionLayoutSource,
       'body.classList.contains("llm-modern-chat-pane")',
