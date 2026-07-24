@@ -54,25 +54,25 @@ describe("reader dedicated AI pane", function () {
     assert.notInclude(lightIcon.toLowerCase(), "brain");
   });
 
-  it("uses neutral outline and terminal-cutout Codex toggle states", function () {
+  it("uses solid theme-aware runtime icons with button selection states", function () {
     const styles = readSource("../addon/content/zoteroPane.css");
     const handlers = readSource("../src/modules/contextPanel/setupHandlers.ts");
-    const outlineIcon = readSource(
-      "../addon/content/icons/codex-app-server.svg",
-    );
     const solidIcon = readSource("../addon/content/icons/codex-logo.svg");
+    const claudeIcon = readSource("../addon/content/icons/claude-code.svg");
     const attribution = readSource("../addon/content/icons/README.md");
 
-    assert.include(outlineIcon, 'fill="none"');
-    assert.include(outlineIcon, 'stroke="#000"');
     assert.include(solidIcon, 'fill-rule="evenodd"');
     assert.include(solidIcon, 'viewBox="0 0 24 24"');
     assert.include(solidIcon, "Codex (OpenAI)");
+    assert.include(claudeIcon, 'viewBox="-3 -3 106 106"');
     assert.notInclude(solidIcon, "linearGradient");
     assert.include(attribution, "glincker/thesvg");
     assert.include(styles, 'mask-image: url("icons/codex-logo.svg")');
     assert.notInclude(styles, 'background-image: url("icons/codex-logo.svg")');
-    assert.include(styles, ".llm-runtime-system-toggle--codex");
+    assert.include(
+      styles,
+      '.llm-runtime-system-toggle[data-active="true"]:not(:disabled)',
+    );
     assert.include(handlers, "panelRuntimeSystemControls");
     assert.include(handlers, "syncRuntimeSystemControls");
   });
@@ -156,6 +156,10 @@ describe("reader dedicated AI pane", function () {
     );
     assert.match(
       styles,
+      /\.llm-modern-chat-pane \.llm-header \{[\s\S]*?padding: 0 8px;/,
+    );
+    assert.match(
+      styles,
       /\.llm-modern-chat-pane \.llm-runtime-system-toggle-icon \{[\s\S]*?width: 20px;[\s\S]*?height: 20px;/,
     );
     assert.match(
@@ -174,10 +178,8 @@ describe("reader dedicated AI pane", function () {
       styles,
       /\.llm-modern-chat-pane \.llm-header-actions \.llm-btn-icon \{[\s\S]*?opacity: 1;/,
     );
-    assert.match(
-      styles,
-      /\.llm-modern-chat-pane \.llm-runtime-system-toggle-icon--claude-code,[\s\S]*?\.llm-modern-chat-pane \.llm-runtime-system-toggle-icon--codex::before \{[\s\S]*?opacity: 1;/,
-    );
+    assert.notInclude(styles, "claude-code-outline.svg");
+    assert.notInclude(styles, "codex-app-server.svg");
   });
 
   it("uses a darker reading surface and native composer controls", function () {
@@ -298,7 +300,7 @@ describe("reader dedicated AI pane", function () {
     assert.include(styles, ".llm-modern-chat-pane .llm-reader-composer-dock");
     assert.include(
       styles,
-      '#llm-runtime-mode-toggle.llm-runtime-mode-static[data-system="codex"]',
+      "#llm-runtime-mode-toggle.llm-runtime-mode-static",
     );
     assert.include(
       actionLayoutSource,

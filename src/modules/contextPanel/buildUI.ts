@@ -268,7 +268,6 @@ function buildUI(body: Element, item?: Zotero.Item | null) {
   const clearBtn = createElement(doc, "button", "llm-btn-icon llm-clear-btn", {
     id: "llm-clear",
     type: "button",
-    textContent: t("Clear"),
     title: t("Clear"),
   });
   clearBtn.dataset.compact = "true";

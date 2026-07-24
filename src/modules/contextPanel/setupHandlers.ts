@@ -343,7 +343,6 @@ import {
   type RuntimeConversationSystem,
   type RuntimeSystemControls,
 } from "./runtimeSystemControls";
-import { shouldCompactHeaderClearButton } from "./headerClearPresentation";
 import { getPanelDomRefs } from "./setupHandlers/domRefs";
 import {
   chooseAutoLoadedContextPanelItem,
@@ -834,12 +833,6 @@ export function setupHandlers(
     Boolean(ElementCtor && value instanceof ElementCtor);
   const headerTop = body.querySelector(
     ".llm-header-top",
-  ) as HTMLDivElement | null;
-  const headerInfo = headerTop?.querySelector(
-    ".llm-header-info",
-  ) as HTMLDivElement | null;
-  const headerActions = headerTop?.querySelector(
-    ".llm-header-actions",
   ) as HTMLDivElement | null;
   panelRoot.tabIndex = 0;
   applyPanelFontScale(panelRoot);
@@ -1996,36 +1989,14 @@ export function setupHandlers(
     cancelBtn,
   });
   const syncResponsiveHeaderClearButton = () => {
-    if (
-      isStandalonePanel ||
-      !headerTop ||
-      !headerInfo ||
-      !headerActions ||
-      !clearBtn
-    ) {
+    if (isStandalonePanel || !clearBtn) {
       return;
     }
     if (panelRoot.dataset.webchatMode === "true") {
       clearBtn.dataset.compact = "false";
       return;
     }
-
-    // Always measure the full label first so widening the sidebar restores it.
-    clearBtn.dataset.compact = "false";
-    const headerRect = headerTop.getBoundingClientRect();
-    const headerInfoRect = headerInfo.getBoundingClientRect();
-    const actionsRect = headerActions.getBoundingClientRect();
-    const leftContentRight =
-      headerInfoRect.left +
-      Math.max(headerInfoRect.width, Number(headerInfo.scrollWidth) || 0);
-    clearBtn.dataset.compact = shouldCompactHeaderClearButton({
-      headerRight: headerRect.right,
-      leftContentRight,
-      actionsLeft: actionsRect.left,
-      actionsRight: actionsRect.right,
-    })
-      ? "true"
-      : "false";
+    clearBtn.dataset.compact = "true";
   };
   let lastUserContextAlignmentPanelWidth = -1;
   const getRoundedPanelWidth = () =>
@@ -5923,8 +5894,9 @@ export function setupHandlers(
         clearBtn.style.opacity = "";
         clearBtn.title = "Exit webchat and return to previous model";
       } else {
-        clearBtn.textContent = "Clear";
-        clearBtn.title = "";
+        clearBtn.textContent = "";
+        clearBtn.dataset.compact = "true";
+        clearBtn.title = t("Clear");
       }
     }
 

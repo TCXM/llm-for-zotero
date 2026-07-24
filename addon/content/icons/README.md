@@ -12,3 +12,7 @@ inherits Zotero's native sidebar icon color.
 [`glincker/thesvg`](https://github.com/glincker/thesvg/blob/main/public/icons/codex-openai/mono.svg).
 It is used for the selected state and rendered through a CSS mask so it follows
 Zotero's current text color. Licensed under the project's MIT license.
+
+`claude-code.svg` uses the Claude symbol sourced from
+[Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Claude_AI_symbol.svg),
+where it is attributed to Anthropic and released under CC0 1.0.

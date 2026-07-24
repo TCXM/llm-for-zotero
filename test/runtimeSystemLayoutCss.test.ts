@@ -80,27 +80,34 @@ describe("runtime system control layout", function () {
     );
 
     assert.include(css, 'mask-image: url("icons/claude-code.svg")');
+    assert.include(css, 'mask-image: url("icons/codex-logo.svg")');
+    assert.notInclude(css, "claude-code-outline.svg");
+    assert.notInclude(css, "codex-app-server.svg");
+    assert.match(
+      css,
+      /\.llm-runtime-system-toggle\[data-active="true"\]:not\(:disabled\)\s*\{[^}]*background:\s*var\(--fill-quarternary\);/s,
+    );
     assert.include(sidebarSource, "createRuntimeSystemControls");
     assert.include(standaloneSource, "createRuntimeSystemControls");
     assert.notInclude(sidebarSource, "<svg");
     assert.notInclude(standaloneSource, "20.998 10.949");
   });
 
-  it("reuses the standalone clear icon for the responsive sidebar button", function () {
+  it("reuses the standalone clear icon for the fixed sidebar button", function () {
     const css = source("addon/content/zoteroPane.css");
     const sidebarSource = source("src/modules/contextPanel/buildUI.ts");
     const handlerSource = source("src/modules/contextPanel/setupHandlers.ts");
 
     assert.include(sidebarSource, "llm-btn-icon llm-clear-btn");
     assert.include(css, '.llm-clear-btn[data-compact="true"]');
-    assert.include(css, "@container (max-width: 380px)");
     assert.equal(
       css.split('url("icons/action-clear.svg")').length - 1,
       4,
       "the sidebar and standalone masks must share the same clear asset",
     );
     assert.include(handlerSource, "syncResponsiveHeaderClearButton");
-    assert.include(handlerSource, "shouldCompactHeaderClearButton");
+    assert.include(handlerSource, 'clearBtn.dataset.compact = "true"');
+    assert.notInclude(handlerSource, "shouldCompactHeaderClearButton");
   });
 
   it("keeps the sidebar export icon fixed when plugin text scales", function () {

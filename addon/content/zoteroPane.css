@@ -81,7 +81,7 @@ item-pane-section.llm-reader-ai-source-section {
   box-sizing: border-box;
   height: 41px;
   min-height: 41px;
-  padding: 0 4px 0 8px;
+  padding: 0 8px;
   border-bottom: var(--material-panedivider);
   background: var(--material-toolbar);
 }
@@ -172,11 +172,6 @@ item-pane-section.llm-reader-ai-source-section {
 .llm-modern-chat-pane .llm-runtime-system-toggle-icon {
   width: 20px;
   height: 20px;
-}
-
-.llm-modern-chat-pane .llm-runtime-system-toggle-icon--claude-code,
-.llm-modern-chat-pane .llm-runtime-system-toggle-icon--codex::before {
-  opacity: 1;
 }
 
 .llm-modern-chat-pane .llm-header-actions {
@@ -749,8 +744,7 @@ item-pane-section.llm-reader-ai-source-section {
   }
 }
 
-.llm-modern-chat-pane
-  #llm-runtime-mode-toggle.llm-runtime-mode-static[data-system="codex"] {
+.llm-modern-chat-pane #llm-runtime-mode-toggle.llm-runtime-mode-static {
   display: none;
 }
 
@@ -1380,12 +1374,12 @@ item-pane-section.llm-reader-ai-source-section {
   flex: 0 0 24px;
 }
 
-.llm-runtime-system-toggle--claude-code[data-active="true"] {
-  color: #d77757;
-}
-
 .llm-runtime-system-toggle:hover:not(:disabled) {
   background: var(--fill-quinary);
+}
+
+.llm-runtime-system-toggle[data-active="true"]:not(:disabled) {
+  background: var(--fill-quarternary);
 }
 
 .llm-runtime-system-toggle:focus-visible {
@@ -1418,44 +1412,9 @@ item-pane-section.llm-reader-ai-source-section {
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
-  opacity: 0.62;
-}
-
-.llm-runtime-system-toggle--claude-code[data-active="true"]
-  .llm-runtime-system-toggle-icon--claude-code {
-  opacity: 1;
 }
 
 .llm-runtime-system-toggle-icon--codex {
-  display: inline-block;
-  position: relative;
-}
-
-.llm-runtime-system-toggle-icon--codex::before,
-.llm-runtime-system-toggle-icon--codex::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
-  transition: opacity 0.15s;
-}
-
-.llm-runtime-system-toggle-icon--codex::before {
-  background-color: var(--fill-primary, #0d0d0d);
-  mask-image: url("icons/codex-app-server.svg");
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: contain;
-  -webkit-mask-image: url("icons/codex-app-server.svg");
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: contain;
-  opacity: 0.62;
-}
-
-.llm-runtime-system-toggle-icon--codex::after {
   background-color: currentColor;
   mask-image: url("icons/codex-logo.svg");
   mask-repeat: no-repeat;
@@ -1465,17 +1424,6 @@ item-pane-section.llm-reader-ai-source-section {
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-position: center;
   -webkit-mask-size: contain;
-  opacity: 0;
-}
-
-.llm-runtime-system-toggle--codex[data-active="true"]
-  .llm-runtime-system-toggle-icon--codex::before {
-  opacity: 0;
-}
-
-.llm-runtime-system-toggle--codex[data-active="true"]
-  .llm-runtime-system-toggle-icon--codex::after {
-  opacity: 1;
 }
 
 /* ---- Webchat connection dot ---- */
